@@ -37,7 +37,8 @@
   /* estados del día */
   --st-ok      : #16a34a;   /* sin alerta */
   --st-alerta  : #dc2626;   /* pronosticado hoy / mañana */
-  --st-pasado  : #ea580c;   /* pronosticado pasado mañana */
+  --st-pasado  : #eab308;   /* pronosticado pasado mañana — v17.0.3: amarillo (semáforo) */
+  --st-pasado-txt: #713f12;
   --st-perdido : #7f1d1d;   /* confirmado (perdido) */
   --st-trabajo : #0f766e;   /* descartado (se trabajó) */
   --st-hist    : #a16207;   /* superó umbral (histórico v16) */
@@ -64,7 +65,7 @@ input, select, textarea { font-family: inherit; }
 @keyframes latido { 0% { box-shadow: 0 0 0 0 rgba(220,38,38,.55); } 70% { box-shadow: 0 0 0 14px rgba(220,38,38,0); } 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0); } }
 .blink { animation: parpadeo 1.1s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .blink, .mk.blink, .dia-panel.blink .dia-banda { animation: none !important; }
+  .blink, .mk.blink, .dia-panel.blink .dia-banda, .obra-fila.rojo { animation: none !important; }
   .cinta-pista { animation-duration: 0s !important; }
 }
 
@@ -157,7 +158,8 @@ input, select, textarea { font-family: inherit; }
 .punto { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
 .obra-fila { border: 1px solid var(--border); border-left: 5px solid var(--st-ok); border-radius: var(--radius-sm); padding: 10px 12px; cursor: pointer; background: var(--surface); text-align: left; width: 100%; }
 .obra-fila:hover { background: #fffbeb; }
-.obra-fila.rojo { border-left-color: var(--st-alerta); }
+.obra-fila.rojo { border-left-color: var(--st-alerta); animation: barraLate 1.4s ease-in-out infinite; }
+@keyframes barraLate { 0%, 100% { border-left-color: var(--st-alerta); box-shadow: inset 4px 0 0 rgba(220,38,38,0); } 50% { border-left-color: #fca5a5; box-shadow: inset 4px 0 0 rgba(220,38,38,.18); } }
 .obra-fila.naranja { border-left-color: var(--st-pasado); }
 .obra-fila-nom { font-weight: 700; font-size: .86rem; }
 .obra-fila-cod { color: var(--muted); font-weight: 500; margin-right: 4px; }
@@ -165,19 +167,21 @@ input, select, textarea { font-family: inherit; }
 .mini-dia { border-radius: 6px; padding: 4px 6px; font-size: .68rem; background: #f8fafc; border: 1px solid var(--border); line-height: 1.3; }
 .mini-dia b { display: block; font-size: .64rem; color: var(--muted); font-weight: 700; }
 .mini-dia.rojo { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
-.mini-dia.naranja { background: #fff7ed; border-color: #fed7aa; color: #9a3412; }
+.mini-dia.naranja { background: #fefce8; border-color: #facc15; color: var(--st-pasado-txt); }
 .mini-dia.perdido { background: #fdf2f2; border-color: var(--st-perdido); color: var(--st-perdido); }
 .mini-dia.trabajo { background: #f0fdfa; border-color: #99f6e4; color: var(--st-trabajo); }
 /* marcadores */
 .mk-wrap { background: none; border: none; }
 .mk { width: 22px; height: 22px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4); background: var(--st-ok); }
 .mk.naranja { background: var(--st-pasado); }
+.mk-ver-todo { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; background: #fff; color: #333; font-size: 1.05rem; cursor: pointer; border: none; }
+.mk-ver-todo:hover { background: #f4f4f4; }
 .mk.rojo { background: var(--st-alerta); }
 .mk.blink { animation: latido 1.4s ease-out infinite; }
 .leaflet-tooltip.mk-etq { background: var(--accent2); color: #fff; border: none; border-radius: 6px; font-family: 'DM Sans', sans-serif; font-size: .72rem; font-weight: 600; padding: 3px 8px; box-shadow: var(--shadow-md); }
 .leaflet-tooltip.mk-etq::before { display: none; }
 .leaflet-tooltip.mk-etq.rojo { background: var(--st-alerta); }
-.leaflet-tooltip.mk-etq.naranja { background: var(--st-pasado); }
+.leaflet-tooltip.mk-etq.naranja { background: var(--st-pasado); color: #422006; }
 
 /* ─────────────────────────────────────────────────
    VISTA OBRA (dashboard)
@@ -206,7 +210,7 @@ input, select, textarea { font-family: inherit; }
 .estado { font-size: .7rem; font-weight: 700; padding: 3px 10px; border-radius: 99px; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; }
 .estado.ok { background: #f0fdf4; color: #166534; }
 .estado.alerta { background: var(--st-alerta); color: #fff; }
-.estado.pasado { background: #fff7ed; color: #9a3412; border: 1px solid #fed7aa; }
+.estado.pasado { background: #fef9c3; color: var(--st-pasado-txt); border: 1px solid #facc15; }
 .estado.perdido { background: var(--st-perdido); color: #fff; }
 .estado.trabajo { background: #f0fdfa; color: var(--st-trabajo); border: 1px solid #99f6e4; }
 .estado.hist { background: #fefce8; color: var(--st-hist); border: 1px solid #fde68a; }
@@ -215,7 +219,7 @@ input, select, textarea { font-family: inherit; }
 .causa { display: flex; align-items: center; gap: 8px; font-size: .82rem; font-weight: 600; color: #991b1b; }
 .causa i { font-size: 1.05rem; }
 .causa .causa-hora { font-weight: 500; color: var(--muted); font-size: .74rem; }
-.dia-panel.pasado .causa { color: #9a3412; }
+.dia-panel.pasado .causa { color: var(--st-pasado-txt); }
 .dia-panel.hist .causa { color: var(--st-hist); }
 .sin-causas { font-size: .78rem; color: var(--muted); }
 
@@ -276,7 +280,7 @@ input, select, textarea { font-family: inherit; }
 .cal-tag { font-size: .64rem; font-weight: 700; border-radius: 4px; padding: 1px 5px; align-self: flex-start; }
 .cal-tag.ok { background: #dcfce7; color: #166534; }
 .cal-tag.alerta { background: var(--st-alerta); color: #fff; }
-.cal-tag.pasado { background: var(--st-pasado); color: #fff; }
+.cal-tag.pasado { background: var(--st-pasado); color: #422006; }
 .cal-tag.perdido { background: var(--st-perdido); color: #fff; }
 .cal-tag.trabajo { background: #ccfbf1; color: var(--st-trabajo); }
 .cal-tag.hist { background: #fef3c7; color: var(--st-hist); }
@@ -369,6 +373,15 @@ input, select, textarea { font-family: inherit; }
 .toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
 .cargando { padding: 60px 20px; text-align: center; color: var(--muted); font-size: .85rem; }
 
+/* v17.0.3 — carrusel de obras (Pronóstico) */
+.carrusel-flecha { position: fixed; top: 50%; transform: translateY(-50%); z-index: 800; width: 46px; height: 82px; border-radius: 12px; border: 1px solid var(--border); background: rgba(255,255,255,.92); color: var(--accent2); font-size: 1.9rem; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-md); }
+.carrusel-flecha:hover { background: var(--accent); color: #fff; border-color: var(--accent-border); }
+.carrusel-flecha.izq { left: 8px; } .carrusel-flecha.der { right: 8px; }
+.carrusel-pos { font-size: .72rem; color: var(--muted); font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+.carrusel-barra { width: 60px; height: 4px; background: var(--border); border-radius: 99px; overflow: hidden; display: inline-block; }
+.carrusel-barra > span { display: block; height: 100%; background: var(--accent); width: 0; }
+body.con-carrusel #vista-obra { padding-left: 68px; padding-right: 68px; }   /* las flechas quedan en el margen, sin tapar los paneles */
+@media (max-width: 560px) { body.con-carrusel #vista-obra { padding-left: 12px; padding-right: 12px; } .carrusel-flecha { width: 34px; height: 60px; font-size: 1.4rem; top: auto; bottom: 46px; transform: none; } }
 /* v17.0.2 — franja de pronóstico desactualizado */
 .franja-desact { background: var(--tag-bg); color: var(--tag-fg); border-bottom: 1px solid #fcd34d; padding: 8px 18px; font-size: .8rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
 .franja-desact i { font-size: 1.05rem; }
@@ -475,6 +488,8 @@ body.pantalla-completa .hdr-email, body.pantalla-completa .hdr-version { display
   </section>
 
   <main id="vista-obra" class="view hidden"></main>
+  <button class="carrusel-flecha izq hidden" id="car-izq" title="Obra anterior (←)" aria-label="Obra anterior"><i class="ti ti-chevron-left"></i></button>
+  <button class="carrusel-flecha der hidden" id="car-der" title="Obra siguiente (→)" aria-label="Obra siguiente"><i class="ti ti-chevron-right"></i></button>
   <main id="vista-calendario" class="view hidden"></main>
   <div id="vista-cargando" class="cargando"><div class="spinner"></div>Cargando tus obras…</div>
 </div>
@@ -596,7 +611,16 @@ body.pantalla-completa .hdr-email, body.pantalla-completa .hdr-version { display
 
 <script>
 // ============================================================
-// ClimaObra — index_co_v17_0_2.html
+// ClimaObra — index_co_v17_0_3.html
+// v17.0.3 (15-oct-2026) — modo sala de reuniones (prueba real de Ale):
+//  · Pronóstico: carrusel de obras con flechas ‹ › a los costados y teclado ← →,
+//    con "2 de 5". En pantalla completa pasa solo cada 30 s (las flechas reinician
+//    el contador; en pausa con un modal, la 🔔 o el Lápiz abiertos). Solo con más de una obra.
+//  · Mapa: botón "Ver todas las obras" bajo + / − (vuelve al encuadre inicial). El mapa
+//    ya no se re-encuadra solo con cada actualización (respeta el zoom del usuario).
+//  · Lista del mapa ordenada por gravedad (rojo → amarillo → verde) y la barra roja late.
+//  · Pasado mañana pasa de naranja a AMARILLO (semáforo): el naranja no se distinguía del
+//    rojo. Lo único que se mueve es lo urgente (rojo).
 // v17.0.2 (15-oct-2026) — franja ámbar "Pronóstico desactualizado": desde las 4:00, si
 //    alguna obra no tiene la consulta de hoy (CO Sync o wttr.in fallaron), lo dice arriba
 //    con la fecha de la última consulta. Se revisa también a las 4:05.
@@ -622,7 +646,7 @@ body.pantalla-completa .hdr-email, body.pantalla-completa .hdr-version { display
 //    Global: PreKOM v9.1.1. Sin sw.js. Actividad en goe_actividad (app co).
 // ============================================================
 
-const APP_VERSION   = 'v17.0.2';
+const APP_VERSION   = 'v17.0.3';
 const SUPABASE_URL  = 'https://uhuftsxrzwhmvzygcuvp.supabase.co';
 const SUPABASE_KEY  = 'sb_publishable_TCibRAnzgaDIbn_MIirw6w_FltKG8X3';
 const REDIRECT_MAIL = 'https://goeapp.github.io/co/';   // la plantilla del mail lo usa para poner "CLIMAOBRA"
@@ -1006,6 +1030,9 @@ document.getElementById('btn-volver-email').addEventListener('click', () => { do
 document.getElementById('btn-cambiar-email').addEventListener('click', () => { document.getElementById('input-pin').value = ''; mostrarPasoLogin('email'); });
 
 function onKeydownGlobal(e) {
+  if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && carruselActivo_() && !algoAbierto_() && !/INPUT|SELECT|TEXTAREA/.test((e.target && e.target.tagName) || '')) {
+    e.preventDefault(); moverObra(e.key === 'ArrowLeft' ? -1 : 1); return;
+  }
   if (e.ctrlKey && e.altKey && (e.key === 'u' || e.key === 'U')) { e.preventDefault(); abrirSessionDialog(); }
   if (e.key === 'Escape') { ['modal-decidir', 'modal-detalle'].forEach(cerrarModal); cerrarNotif(); }
 }
@@ -1056,6 +1083,7 @@ async function cargarInicio(primera) {
   }
   pintarSelectorObra_();
   pintarFranjaDesact_();
+  pintarFlechas_();
   pintarCampana_(inicio.notificacionesPendientes);
   cargarNovedades();
   const multi = inicio.obras.length > 1;
@@ -1109,10 +1137,50 @@ async function irA(v) {
   document.getElementById('vista-mapa').classList.toggle('hidden', v !== 'mapa');
   document.getElementById('vista-obra').classList.toggle('hidden', v !== 'obra');
   document.getElementById('vista-calendario').classList.toggle('hidden', v !== 'calendario');
+  pintarFlechas_();
   if (v === 'mapa') { pintarMapa(); registrarActividad_('ver_mapa', '', 'OK'); }
   if (v === 'obra') { await cargarVistaObra(); registrarActividad_('ver_obra', obraSel, 'OK'); }
   if (v === 'calendario') { if (!calMes) calMes = (inicio ? inicio.hoy : hoyAR()).slice(0, 7); await cargarCalendario(); registrarActividad_('ver_calendario', calMes, 'OK'); }
 }
+
+// ── CARRUSEL DE OBRAS (v17.0.3) ──────────────────────────────
+const CARRUSEL_SEG = 30;
+let carruselSeg = 0;
+function carruselActivo_() { return vista === 'obra' && inicio && inicio.obras.length > 1; }
+function algoAbierto_() {
+  return ['modal-decidir', 'modal-detalle', 'dialogo-overlay', 'session-dialog-overlay'].some(id => document.getElementById(id).classList.contains('visible'))
+    || document.getElementById('panel-notif').classList.contains('visible') || lapizState.activo;
+}
+function pintarFlechas_() {
+  const on = carruselActivo_();
+  document.getElementById('car-izq').classList.toggle('hidden', !on);
+  document.getElementById('car-der').classList.toggle('hidden', !on);
+  document.body.classList.toggle('con-carrusel', on);
+}
+async function moverObra(paso) {
+  if (!carruselActivo_()) return;
+  const i = inicio.obras.findIndex(o => o.obraId === obraSel);
+  const n = inicio.obras.length;
+  obraSel = inicio.obras[((i < 0 ? 0 : i) + paso + n) % n].obraId;
+  guardarPref(OBRA_KEY, obraSel);
+  document.getElementById('sel-obra').value = obraSel;
+  carruselSeg = 0;
+  lapizBorrar();
+  await cargarVistaObra(true);
+}
+document.getElementById('car-izq').addEventListener('click', () => moverObra(-1));
+document.getElementById('car-der').addEventListener('click', () => moverObra(1));
+// En pantalla completa pasa sola cada 30 s; en pausa si hay algo abierto
+setInterval(() => {
+  const auto = carruselActivo_() && !!document.fullscreenElement;
+  const barra = document.getElementById('car-barra');
+  if (barra) barra.classList.toggle('hidden', !auto);
+  if (!auto) { carruselSeg = 0; return; }
+  if (algoAbierto_() || document.hidden) return;
+  carruselSeg++;
+  if (barra) barra.firstElementChild.style.width = Math.min(100, carruselSeg / CARRUSEL_SEG * 100) + '%';
+  if (carruselSeg >= CARRUSEL_SEG) moverObra(1);
+}, 1000);
 
 // ── MAPA ─────────────────────────────────────────────────────
 function pintarMapa() {
@@ -1127,6 +1195,15 @@ function pintarMapa() {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
       }).addTo(mapa);
       capaMarcadores = L.layerGroup().addTo(mapa);
+      // v17.0.3 — botón "Ver todas las obras" (debajo de + / −)
+      const VerTodo = L.Control.extend({ options: { position: 'topleft' }, onAdd: function () {
+        const d = L.DomUtil.create('div', 'leaflet-bar');
+        d.innerHTML = '<button type="button" class="mk-ver-todo" title="Ver todas las obras" aria-label="Ver todas las obras"><i class="ti ti-arrows-maximize"></i></button>';
+        L.DomEvent.disableClickPropagation(d);
+        d.querySelector('button').addEventListener('click', () => encuadrarMapa_());
+        return d;
+      } });
+      new VerTodo().addTo(mapa);
     }
     capaMarcadores.clearLayers();
     const pts = [];
@@ -1148,13 +1225,13 @@ function pintarMapa() {
       m.addTo(capaMarcadores);
       pts.push([o.lat, o.lon]);
     });
-    setTimeout(() => {
-      mapa.invalidateSize();
-      if (pts.length === 1) mapa.setView(pts[0], 9); else mapa.fitBounds(pts, { padding: [70, 70], maxZoom: 9 });
-    }, 30);
+    mapaPts = pts;
+    setTimeout(() => { mapa.invalidateSize(); if (!mapaEncuadrado) encuadrarMapa_(); }, 30);
   }
   // lista lateral
-  document.getElementById('mapa-lista').innerHTML = inicio.obras.map(o => {
+  const PESO = { rojo: 0, naranja: 1, verde: 2 };
+  const ordenadas = inicio.obras.slice().sort((a, b) => PESO[peorEstado(a)] - PESO[peorEstado(b)] || a.codigo.localeCompare(b.codigo));
+  document.getElementById('mapa-lista').innerHTML = ordenadas.map(o => {
     const est = peorEstado(o);
     return '<button class="obra-fila ' + (est === 'verde' ? '' : est) + '" onclick="abrirObra(\'' + o.obraId + '\')">' +
       '<div class="obra-fila-nom"><span class="obra-fila-cod">' + escaparHtml(o.codigo) + '</span>' + escaparHtml(o.nombreCorto) + '</div>' +
@@ -1165,6 +1242,13 @@ function pintarMapa() {
         return '<div class="mini-dia ' + cls + '"><b>' + nombreDia(d.fecha) + '</b>' + escaparHtml(c) + '</div>';
       }).join('') + '</div></button>';
   }).join('');
+}
+let mapaPts = [], mapaEncuadrado = false;
+/** Encuadre inicial con todas las obras (al entrar y con el botón ⤢). */
+function encuadrarMapa_() {
+  if (!mapa || !mapaPts.length) return;
+  if (mapaPts.length === 1) mapa.setView(mapaPts[0], 9); else mapa.fitBounds(mapaPts, { padding: [70, 70], maxZoom: 9 });
+  mapaEncuadrado = true;
 }
 function abrirObra(id) { obraSel = id; guardarPref(OBRA_KEY, id); document.getElementById('sel-obra').value = id; irA('obra'); }
 
@@ -1193,6 +1277,8 @@ function pintarVistaObra() {
   if (u.tempMin != null) chips.push('<span class="chip"><i class="ti ti-snowflake"></i> Helada ≤ <strong>' + num(u.tempMin) + ' °C</strong></span>');
   cont.innerHTML =
     '<div class="obra-cab"><div class="obra-tit"><small>' + escaparHtml(o.codigo) + '</small>' + escaparHtml(o.nombreCorto) + '</div>' +
+    (inicio.obras.length > 1 ? '<span class="carrusel-pos" id="car-pos">' + (inicio.obras.findIndex(x => x.obraId === o.obraId) + 1) + ' de ' + inicio.obras.length +
+      '<span class="carrusel-barra hidden" id="car-barra" title="Pasa sola a la siguiente obra"><span></span></span></span>' : '') +
     '<div class="chips">' + chips.join('') + '</div>' +
     '<div class="obra-fuente">Pronóstico de modelo (wttr.in) · ' + (consulta ? 'consulta del ' + ddmm(consulta) : 'todavía sin consulta') + '</div></div>' +
     '<div class="dias-grid">' + r.dias.map(d => htmlPanelDia(d, o)).join('') + '</div>';
