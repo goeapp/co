@@ -148,7 +148,7 @@ input, select, textarea { font-family: inherit; }
    VISTA MAPA
 ───────────────────────────────────────────────── */
 .view { width: 100%; max-width: 1680px; margin: 0 auto; padding: 18px 22px 28px; }
-#vista-mapa { display: grid; grid-template-columns: 1fr 340px; gap: 0; height: calc(100vh - var(--header-h) - var(--cinta-h)); }
+#vista-mapa { display: grid; grid-template-columns: 1fr 340px; gap: 0; height: calc(100vh - var(--header-h) - var(--cinta-h) - var(--franja-h, 0px)); }
 #mapa { width: 100%; height: 100%; background: #dbe4ee; }
 .mapa-lado { background: var(--surface); border-left: 1px solid var(--border); overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
 .mapa-lado-tit { font-family: 'Bebas Neue', sans-serif; font-size: 1.25rem; color: var(--accent2); }
@@ -369,6 +369,9 @@ input, select, textarea { font-family: inherit; }
 .toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
 .cargando { padding: 60px 20px; text-align: center; color: var(--muted); font-size: .85rem; }
 
+/* v17.0.2 — franja de pronóstico desactualizado */
+.franja-desact { background: var(--tag-bg); color: var(--tag-fg); border-bottom: 1px solid #fcd34d; padding: 8px 18px; font-size: .8rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.franja-desact i { font-size: 1.05rem; }
 /* pantalla completa (sala de reuniones): sin email ni versión */
 body.pantalla-completa .hdr-email, body.pantalla-completa .hdr-version { display: none; }
 
@@ -455,6 +458,8 @@ body.pantalla-completa .hdr-email, body.pantalla-completa .hdr-version { display
     <div class="hdr-sep"></div>
     <div class="hdr-email" id="hdr-email" title="Sesión (Ctrl+Alt+U)"></div>
   </header>
+
+  <div id="franja-desact" class="franja-desact hidden" role="status"><i class="ti ti-alert-triangle"></i><span id="franja-desact-txt"></span></div>
 
   <section id="vista-mapa" class="hidden">
     <div id="mapa"></div>
@@ -591,7 +596,10 @@ body.pantalla-completa .hdr-email, body.pantalla-completa .hdr-version { display
 
 <script>
 // ============================================================
-// ClimaObra — index_co_v17_0_1.html
+// ClimaObra — index_co_v17_0_2.html
+// v17.0.2 (15-oct-2026) — franja ámbar "Pronóstico desactualizado": desde las 4:00, si
+//    alguna obra no tiene la consulta de hoy (CO Sync o wttr.in fallaron), lo dice arriba
+//    con la fecha de la última consulta. Se revisa también a las 4:05.
 // v17.0.1 (15-oct-2026) — prueba real de Ale:
 //  · Mapa: OpenStreetMap (CARTO pasó a pedir clave y mostraba "API KEY REQUIRED").
 //  · Calendario: etiqueta verde "Sin alertas" en los días con pronóstico y sin
@@ -614,7 +622,7 @@ body.pantalla-completa .hdr-email, body.pantalla-completa .hdr-version { display
 //    Global: PreKOM v9.1.1. Sin sw.js. Actividad en goe_actividad (app co).
 // ============================================================
 
-const APP_VERSION   = 'v17.0.1';
+const APP_VERSION   = 'v17.0.2';
 const SUPABASE_URL  = 'https://uhuftsxrzwhmvzygcuvp.supabase.co';
 const SUPABASE_KEY  = 'sb_publishable_TCibRAnzgaDIbn_MIirw6w_FltKG8X3';
 const REDIRECT_MAIL = 'https://goeapp.github.io/co/';   // la plantilla del mail lo usa para poner "CLIMAOBRA"
@@ -1047,6 +1055,7 @@ async function cargarInicio(primera) {
     return;
   }
   pintarSelectorObra_();
+  pintarFranjaDesact_();
   pintarCampana_(inicio.notificacionesPendientes);
   cargarNovedades();
   const multi = inicio.obras.length > 1;
@@ -1060,6 +1069,25 @@ async function cargarInicio(primera) {
     if (!obraPorId(obraSel)) obraSel = inicio.obras[0].obraId;
     if (vista === 'mapa') pintarMapa();
   }
+}
+
+/** v17.0.2 — desde las 4:00, avisa si alguna obra no tiene la consulta de hoy. */
+function pintarFranjaDesact_() {
+  const el = document.getElementById('franja-desact');
+  const hora = Number(new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', hourCycle: 'h23' }).format(new Date()));
+  const hoy = inicio.hoy;
+  const viejas = inicio.obras.filter(o => !(o.dias && o.dias[0] && o.dias[0].consulta === hoy));
+  let txt = '';
+  if (hora >= 4 && viejas.length) {
+    const ult = inicio.obras.flatMap(o => (o.dias || []).map(d => d.consulta)).filter(Boolean).sort().pop();
+    txt = viejas.length === inicio.obras.length
+      ? 'Pronóstico desactualizado: la última consulta es del ' + (ult ? ddmm(ult) : '—') + '. CO Sync todavía no trajo el de hoy; los valores pueden haber cambiado.'
+      : 'Pronóstico desactualizado en ' + viejas.map(o => o.codigo + ' ' + o.nombreCorto).join(', ') + ': falta la consulta de hoy.';
+  }
+  document.getElementById('franja-desact-txt').textContent = txt;
+  el.classList.toggle('hidden', !txt);
+  document.documentElement.style.setProperty('--franja-h', txt ? el.getBoundingClientRect().height + 'px' : '0px');
+  if (mapa) setTimeout(() => mapa.invalidateSize(), 50);
 }
 
 function pintarSelectorObra_() {
@@ -1561,12 +1589,12 @@ function suscribirRealtime_() {
       .subscribe(estado => { if (estado === 'CHANNEL_ERROR' || estado === 'TIMED_OUT') console.warn('[realtime]', estado); });
   } catch (err) { console.warn('[realtime] no disponible:', err.message); }
 }
-/** Sin refresco periódico: solo a las 0:00 (cambia "hoy") y a las 3:15 (pronóstico nuevo). */
+/** Sin refresco periódico: solo a las 0:00 (cambia "hoy"), 3:15 (pronóstico nuevo) y 4:05 (revisa si quedó desactualizado). */
 function programarRecargas_() {
   const ahora = new Date();
   const partes = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).formatToParts(ahora).map(p => [p.type, p.value]));
   const seg = Number(partes.hour) * 3600 + Number(partes.minute) * 60 + Number(partes.second);
-  const objetivos = [30, 3 * 3600 + 15 * 60];   // 0:00:30 y 3:15
+  const objetivos = [30, 3 * 3600 + 15 * 60, 4 * 3600 + 5 * 60];   // 0:00:30, 3:15 y 4:05 (franja de desactualizado)
   const faltan = objetivos.map(t => (t - seg + 86400) % 86400 || 86400);
   setTimeout(async () => { await refrescarTodo_('reloj'); programarRecargas_(); }, Math.min(...faltan) * 1000);
 }
