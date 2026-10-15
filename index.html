@@ -75,7 +75,7 @@ input, select, textarea { font-family: inherit; }
 .pantalla-centrada.visible { display: flex; }
 .caja { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 40px 36px; max-width: 380px; width: 100%; text-align: center; box-shadow: var(--shadow-md); }
 .caja-logo    { font-family: 'Bebas Neue', sans-serif; font-size: 1.9rem; color: var(--accent); letter-spacing: .5px; margin-bottom: 4px; }
-.logo-pre     { font-size: .55em; }
+.logo-pre     { font-size: 1em; }   /* v17.0.1 — CLIMA OBRA parejo: mismo tamaño que OBRA */
 .logo-kom     { font-size: 1em; }
 .caja-version { font-size: .62rem; color: var(--muted); letter-spacing: .03em; margin-bottom: 4px; }
 .caja-sub     { font-size: .78rem; color: var(--muted); margin-bottom: 28px; }
@@ -274,6 +274,7 @@ input, select, textarea { font-family: inherit; }
 .cal-num { font-weight: 700; font-size: .82rem; }
 .cal-dia.sin-datos-dia .cal-num { color: #cbd5e1; }
 .cal-tag { font-size: .64rem; font-weight: 700; border-radius: 4px; padding: 1px 5px; align-self: flex-start; }
+.cal-tag.ok { background: #dcfce7; color: #166534; }
 .cal-tag.alerta { background: var(--st-alerta); color: #fff; }
 .cal-tag.pasado { background: var(--st-pasado); color: #fff; }
 .cal-tag.perdido { background: var(--st-perdido); color: #fff; }
@@ -398,7 +399,7 @@ body.pantalla-completa .hdr-email, body.pantalla-completa .hdr-version { display
 <!-- ═══════════════ LOGIN ═══════════════ -->
 <div id="login-screen" class="pantalla-centrada">
   <div class="caja">
-    <div class="caja-logo"><span class="logo-pre">Clima</span><span class="logo-kom">Obra</span></div>
+    <div class="caja-logo"><span class="logo-pre">Clima</span> <span class="logo-kom">Obra</span></div>
     <div class="caja-version" id="version-label"></div>
     <div class="caja-sub">Pronóstico y días perdidos por obra</div>
 
@@ -440,7 +441,7 @@ body.pantalla-completa .hdr-email, body.pantalla-completa .hdr-version { display
 <!-- ═══════════════ APP ═══════════════ -->
 <div id="app">
   <header id="app-header">
-    <div class="hdr-logo"><span class="logo-pre">Clima</span><span class="logo-kom">Obra</span></div>
+    <div class="hdr-logo"><span class="logo-pre">Clima</span> <span class="logo-kom">Obra</span></div>
     <div class="hdr-version" id="version-label-app"></div>
     <nav class="hdr-nav">
       <button class="hdr-nav-btn" id="nav-mapa" data-vista="mapa"><i class="ti ti-map-2"></i> Mapa</button>
@@ -590,7 +591,12 @@ body.pantalla-completa .hdr-email, body.pantalla-completa .hdr-version { display
 
 <script>
 // ============================================================
-// ClimaObra — index_co_v17_0_0.html
+// ClimaObra — index_co_v17_0_1.html
+// v17.0.1 (15-oct-2026) — prueba real de Ale:
+//  · Mapa: OpenStreetMap (CARTO pasó a pedir clave y mostraba "API KEY REQUIRED").
+//  · Calendario: etiqueta verde "Sin alertas" en los días con pronóstico y sin
+//    umbrales cruzados; el día vacío queda solo para "sin datos".
+//  · Logo "CLIMA OBRA" parejo (misma tipografía y tamaño), en header y login.
 // v17.0.0 (15-oct-2026) — PWA NUEVA sobre Supabase (Diseno_ClimaObra_v17_0_0.md).
 //  · Pronóstico de wttr.in en bloques de 3 h para hoy, mañana y pasado; lo
 //    consulta CO Sync a las 3:00 y la base evalúa los umbrales de cada obra.
@@ -608,7 +614,7 @@ body.pantalla-completa .hdr-email, body.pantalla-completa .hdr-version { display
 //    Global: PreKOM v9.1.1. Sin sw.js. Actividad en goe_actividad (app co).
 // ============================================================
 
-const APP_VERSION   = 'v17.0.0';
+const APP_VERSION   = 'v17.0.1';
 const SUPABASE_URL  = 'https://uhuftsxrzwhmvzygcuvp.supabase.co';
 const SUPABASE_KEY  = 'sb_publishable_TCibRAnzgaDIbn_MIirw6w_FltKG8X3';
 const REDIRECT_MAIL = 'https://goeapp.github.io/co/';   // la plantilla del mail lo usa para poner "CLIMAOBRA"
@@ -1087,9 +1093,10 @@ function pintarMapa() {
   else {
     if (!mapa) {
       mapa = L.map('mapa', { zoomControl: true, attributionControl: true });
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-        maxZoom: 18, subdomains: 'abcd',
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+      // v17.0.1 — OpenStreetMap (CARTO pasó a pedir clave)
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
       }).addTo(mapa);
       capaMarcadores = L.layerGroup().addTo(mapa);
     }
@@ -1294,7 +1301,8 @@ function pintarCalendario() {
   calDias.forEach(d => {
     const rel = difDias(d.fecha, hoy);
     const est = estadoDia(d, rel);
-    const tag = est === 'ok' ? '' : '<span class="cal-tag ' + est + (est === 'alerta' ? ' blink' : '') + '">' +
+    // v17.0.1 — con pronóstico y sin umbrales cruzados: "Sin alertas" (vacío = sin datos)
+    const tag = est === 'ok' ? (d.conDatos ? '<span class="cal-tag ok">Sin alertas</span>' : '') : '<span class="cal-tag ' + est + (est === 'alerta' ? ' blink' : '') + '">' +
       (est === 'perdido' ? (d.decision.tipo === 'total' ? 'Perdido' : 'Parcial ' + num(d.decision.horasPerdidas) + ' h') : est === 'trabajo' ? 'Se trabajó' : est === 'hist' ? 'Superó umbral' : 'Probable') + '</span>';
     const icos = (d.alerta || []).map(c => '<i class="ti ' + CAUSAS[c.causa].ico + '" title="' + escaparHtml(CAUSAS[c.causa].txt(c)) + '"></i>').join('');
     h += '<button class="cal-dia' + (rel === 0 ? ' hoy' : '') + (d.conDatos ? '' : ' sin-datos-dia') + '" onclick="abrirDetalleDia(\'' + d.fecha + '\')" aria-label="' + d.fecha + ' ' + ESTADO_TXT[est] + '">' +
@@ -1302,11 +1310,13 @@ function pintarCalendario() {
       (d.notifPendientes ? '<i class="ti ti-bell cal-notif" title="Notificación pendiente"></i>' : '') + '</button>';
   });
   h += '</div><div class="cal-ley">' +
+    '<span><i class="punto" style="background:var(--st-ok)"></i> Sin alertas</span>' +
     '<span><i class="punto" style="background:var(--st-alerta)"></i> Probable día perdido</span>' +
     '<span><i class="punto" style="background:var(--st-perdido)"></i> Confirmado</span>' +
     '<span><i class="punto" style="background:var(--st-trabajo)"></i> Se trabajó</span>' +
     '<span><i class="punto" style="background:var(--st-hist)"></i> Superó umbral (dato v16)</span>' +
-    '<span><i class="ti ti-bell" style="color:#2563eb"></i> Notificación pendiente</span></div>';
+    '<span><i class="ti ti-bell" style="color:#2563eb"></i> Notificación pendiente</span>' +
+    '<span>Vacío: sin datos</span></div>';
   document.getElementById('vista-calendario').innerHTML = h;
 }
 function moverMes(n) {
