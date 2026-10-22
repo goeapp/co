@@ -231,6 +231,20 @@ input, select, textarea { font-family: inherit; }
 .evo th { font-weight: 700; color: var(--muted); font-size: .66rem; }
 .evo td.ult { font-weight: 700; color: var(--text); }
 .evo td.cruza { color: var(--st-alerta); font-weight: 700; }
+/* v17.0.4 — tendencia por fila + calidad del pronóstico */
+.evo-tit { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.evo th.hoy-col { color: var(--accent); }
+.evo td.tend, .evo th.tend { text-align: center; width: 34px; padding-left: 4px; padding-right: 6px; }
+.tend-fl { font-size: .95rem; font-weight: 700; line-height: 1; }
+.tend-fl.peor { color: var(--st-alerta); }
+.tend-fl.mejor { color: var(--st-ok); }
+.tend-fl.igual, .tend-fl.neutro { color: #94a3b8; }
+.calidad { font-size: .64rem; font-weight: 700; padding: 1px 8px; border-radius: 99px; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; cursor: help; }
+.calidad .punto { width: 7px; height: 7px; background: currentColor; }
+.calidad.estable { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+.calidad.cambiante { background: #fef9c3; color: var(--st-pasado-txt); border: 1px solid #facc15; }
+.calidad.inestable { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+.evo-ley { font-size: .62rem; color: var(--muted); padding: 4px 10px; border-top: 1px solid var(--border); background: #f8fafc; }
 
 .bloques { padding: 0 16px 8px; }
 .bloques-cab, .bloque { display: grid; grid-template-columns: 46px 22px 1fr 1fr 1fr; gap: 8px; align-items: center; }
@@ -611,7 +625,14 @@ body.pantalla-completa .hdr-email, body.pantalla-completa .hdr-version { display
 
 <script>
 // ============================================================
-// ClimaObra — index_co_v17_0_3.html
+// ClimaObra — index_co_v17_0_4.html
+// v17.0.4 (22-oct-2026) — panel "Cómo viene cambiando el pronóstico" más claro:
+//  · Columnas con la fecha de cada consulta ("20/10 · 21/10 · Hoy") en lugar de D-2/D-1/D-0.
+//  · Columna Tend. por medida: ↑ roja se acerca al umbral, ↓ verde se aleja, = sin cambio
+//    relevante (hasta 10 % de la escala). Medida sin umbral en la obra: flecha gris.
+//  · Calidad del pronóstico del día: Estable / Cambiante / Inestable, según el mayor
+//    rango (máx − mín) entre consultas en relación al umbral (≥ 20 % cambiante, ≥ 50 %
+//    inestable). Temperaturas contra una escala fija de 10 °C.
 // v17.0.3 (15-oct-2026) — modo sala de reuniones (prueba real de Ale):
 //  · Pronóstico: carrusel de obras con flechas ‹ › a los costados y teclado ← →,
 //    con "2 de 5". En pantalla completa pasa solo cada 30 s (las flechas reinician
@@ -646,7 +667,7 @@ body.pantalla-completa .hdr-email, body.pantalla-completa .hdr-version { display
 //    Global: PreKOM v9.1.1. Sin sw.js. Actividad en goe_actividad (app co).
 // ============================================================
 
-const APP_VERSION   = 'v17.0.3';
+const APP_VERSION   = 'v17.0.4';
 const SUPABASE_URL  = 'https://uhuftsxrzwhmvzygcuvp.supabase.co';
 const SUPABASE_KEY  = 'sb_publishable_TCibRAnzgaDIbn_MIirw6w_FltKG8X3';
 const REDIRECT_MAIL = 'https://goeapp.github.io/co/';   // la plantilla del mail lo usa para poner "CLIMAOBRA"
@@ -1284,6 +1305,39 @@ function pintarVistaObra() {
     '<div class="dias-grid">' + r.dias.map(d => htmlPanelDia(d, o)).join('') + '</div>';
 }
 
+// ── EVOLUCIÓN DEL PRONÓSTICO (v17.0.4) ───────────────────────
+// El cambio se mide en relación al umbral de la obra (4 mm pesan mucho si el
+// umbral es 10 mm, poco si es 50). Las temperaturas no tienen un "cero" natural
+// (helada ≤ 0 °C), así que se miden contra una escala fija de 10 °C.
+const EVO_ESCALA_TEMP = 10;         // °C
+const EVO_RELEVANTE   = 0.10;       // cambio > 10 % de la escala → flecha
+const EVO_CORTES      = { cambiante: 0.20, inestable: 0.50 };   // rango / escala
+/** Tendencia de una medida: primera vs. última consulta; rango = máx − mín (fracción de la escala). */
+function analizarEvo_(vals, x) {
+  const v = vals.filter(n => n != null).map(Number);
+  if (v.length < 2) return { flecha: '', clase: 'igual', tip: 'Una sola consulta', rango: 0, cuenta: false };
+  const tieneUmb = x.umb != null;
+  // sin umbral en la obra: escala de referencia (10 mm, 40 y 60 km/h) solo para la flecha gris
+  const escala = x.temp ? EVO_ESCALA_TEMP : (tieneUmb && Number(x.umb) > 0 ? Number(x.umb) : x.ref);
+  const delta = v[v.length - 1] - v[0];
+  const rango = escala ? (Math.max(...v) - Math.min(...v)) / escala : 0;
+  const relevante = Math.abs(delta) / escala > EVO_RELEVANTE;
+  const signo = (delta > 0 ? '+' : '') + num(delta);
+  if (!relevante) return { flecha: '=', clase: 'igual', tip: 'Sin cambio relevante (' + signo + ')', rango: rango, cuenta: tieneUmb };
+  const sube = delta > 0;
+  if (!tieneUmb) return { flecha: sube ? '↑' : '↓', clase: 'neutro', tip: (sube ? 'Subió ' : 'Bajó ') + signo + ' · la obra no tiene umbral para esta medida', rango: rango, cuenta: false };
+  const peor = x.menor ? !sube : sube;
+  return { flecha: sube ? '↑' : '↓', clase: peor ? 'peor' : 'mejor', tip: (peor ? 'Se acerca al umbral' : 'Se aleja del umbral') + ' (' + signo + ')', rango: rango, cuenta: true };
+}
+/** Calidad: el mayor rango entre las medidas con umbral. */
+function calidadEvo_(peso, hayUmbral) {
+  if (!hayUmbral) return null;
+  const pct = Math.round(peso * 100) + ' %';
+  if (peso >= EVO_CORTES.inestable) return { clase: 'inestable', txt: 'Inestable', tip: 'Cambió mucho entre consultas (hasta ' + pct + ' del umbral). Conviene no confiar todavía.' };
+  if (peso >= EVO_CORTES.cambiante) return { clase: 'cambiante', txt: 'Cambiante', tip: 'Se movió bastante entre consultas (hasta ' + pct + ' del umbral).' };
+  return { clase: 'estable', txt: 'Estable', tip: 'Casi no cambió entre consultas (hasta ' + pct + ' del umbral).' };
+}
+
 /** Panel de un día: estado, causas, evolución, 8 bloques y pie (decisión). */
 function htmlPanelDia(d, o) {
   const hoy = inicio ? inicio.hoy : hoyAR();
@@ -1317,20 +1371,32 @@ function htmlPanelDia(d, o) {
   h += '</div>';
 
   // evolución (solo si hay más de una consulta wttr)
+  // v17.0.4 — columnas con la fecha de cada consulta, tendencia ↑ ↓ = por fila
+  //           y calidad del pronóstico (estable / cambiante / inestable)
   const evo = (d.evolucion || []).filter(e => e.fuente === 'wttr');
   if (evo.length > 1) {
-    const etq = e => 'D-' + e.anticipacion;
-    const fila = (lbl, f, umb, menor) => '<tr><td>' + lbl + '</td>' + evo.map((e, i) => {
-      const v = f(e); const cruza = umb != null && v != null && (menor ? v <= umb : v >= umb);
+    const filas = [
+      { lbl: 'Lluvia (mm)', f: e => e.lluvia, umb: u.lluvia, ref: 10 },
+      { lbl: 'Viento máx.', f: e => e.vientoMax, umb: u.viento, ref: 40 },
+      evo.some(e => e.rafagaMax != null) ? { lbl: 'Ráfaga máx.', f: e => e.rafagaMax, umb: u.rafaga, ref: 60 } : null,
+      { lbl: 'Temp. máx.', f: e => e.tempMax, umb: u.tempMax, temp: true },
+      { lbl: 'Temp. mín.', f: e => e.tempMin, umb: u.tempMin, temp: true, menor: true }
+    ].filter(Boolean);
+    const ana = filas.map(x => ({ x: x, t: analizarEvo_(evo.map(x.f), x) }));
+    const peso = ana.filter(a => a.t.cuenta).reduce((m, a) => Math.max(m, a.t.rango), 0);
+    const cal = calidadEvo_(peso, ana.some(a => a.t.cuenta));
+    const etqCol = e => e.consulta === hoy ? 'Hoy' : ddmm(e.consulta);
+    const fila = a => '<tr><td>' + a.x.lbl + '</td>' + evo.map((e, i) => {
+      const v = a.x.f(e); const cruza = a.x.umb != null && v != null && (a.x.menor ? v <= a.x.umb : v >= a.x.umb);
       return '<td class="' + (i === evo.length - 1 ? 'ult ' : '') + (cruza ? 'cruza' : '') + '">' + num(v) + '</td>';
-    }).join('') + '</tr>';
-    h += '<div class="evo"><div class="evo-tit">Cómo cambió el pronóstico de este día</div><table><tr><th></th>' +
-      evo.map(e => '<th title="Consulta del ' + ddmm(e.consulta) + '">' + etq(e) + '</th>').join('') + '</tr>' +
-      fila('Lluvia (mm)', e => e.lluvia, u.lluvia) +
-      fila('Viento máx.', e => e.vientoMax, u.viento) +
-      (evo.some(e => e.rafagaMax != null) ? fila('Ráfaga máx.', e => e.rafagaMax, u.rafaga) : '') +
-      fila('Temp. máx.', e => e.tempMax, u.tempMax) +
-      fila('Temp. mín.', e => e.tempMin, u.tempMin, true) + '</table></div>';
+    }).join('') + '<td class="tend" title="' + escaparHtml(a.t.tip) + '"><span class="tend-fl ' + a.t.clase + '">' + a.t.flecha + '</span></td></tr>';
+    h += '<div class="evo"><div class="evo-tit"><span>Cómo viene cambiando el pronóstico de este día</span>' +
+      (cal ? '<span class="calidad ' + cal.clase + '" title="' + escaparHtml(cal.tip) + '"><i class="punto"></i>' + cal.txt + '</span>' : '') + '</div>' +
+      '<table><tr><th>Consulta del</th>' +
+      evo.map(e => '<th class="' + (e.consulta === hoy ? 'hoy-col' : '') + '" title="Pronóstico consultado el ' + ddmm(e.consulta) + ', ' + e.anticipacion + ' día' + (e.anticipacion === 1 ? '' : 's') + ' antes">' + etqCol(e) + '</th>').join('') +
+      '<th class="tend" title="Tendencia entre la primera y la última consulta">Tend.</th></tr>' +
+      ana.map(fila).join('') + '</table>' +
+      '<div class="evo-ley"><b style="color:var(--st-alerta)">↑</b> se acerca al umbral · <b style="color:var(--st-ok)">↓</b> se aleja · <b style="color:#94a3b8">=</b> sin cambio relevante · gris: medida sin umbral en la obra</div></div>';
   }
 
   // bloques
