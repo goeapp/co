@@ -1,0 +1,1901 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>ClimaObra</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230f172a'/%3E%3Ccircle cx='24' cy='24' r='9' fill='%23d97706'/%3E%3Cpath d='M18 44h28a9 9 0 0 0-1-18 12 12 0 0 0-23 3 8 8 0 0 0-4 15z' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.31.0/dist/tabler-icons.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<style>
+/* ─────────────────────────────────────────────────
+   DESIGN TOKENS — los mismos de PreKOM v9.1.1 / BDC / MdT
+   + colores de ESTADO propios de ClimaObra
+───────────────────────────────────────────────── */
+:root {
+  --bg       : #f1f5f9;
+  --surface  : #ffffff;
+  --border   : #e2e8f0;
+  --accent   : #d97706;
+  --accent2  : #0f172a;
+  --tag-bg   : #fef3c7;
+  --tag-fg   : #92400e;
+  --accent-border: #92400e;
+  --text     : #1e293b;
+  --muted    : #64748b;
+  --radius   : 12px;
+  --radius-sm: 8px;
+  --shadow   : 0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,.10);
+  --header-h : 52px;
+  --cinta-h  : 34px;
+  --danger   : #dc2626;
+  /* estados del día */
+  --st-ok      : #16a34a;   /* sin alerta */
+  --st-alerta  : #dc2626;   /* pronosticado hoy / mañana */
+  --st-pasado  : #eab308;   /* pronosticado pasado mañana — v17.0.3: amarillo (semáforo) */
+  --st-pasado-txt: #713f12;
+  --st-perdido : #7f1d1d;   /* confirmado (perdido) */
+  --st-trabajo : #0f766e;   /* descartado (se trabajó) */
+  --st-hist    : #a16207;   /* superó umbral (histórico v16) */
+  /* barras */
+  --bar-temp   : #d97706;
+  --bar-viento : #2563eb;
+  --bar-lluvia : #0891b2;
+  --bar-fondo  : #e2e8f0;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; min-height: 100%; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: 'DM Sans', sans-serif; font-size: 14px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased; overflow-x: hidden;
+}
+button { font-family: inherit; cursor: pointer; }
+input, select, textarea { font-family: inherit; }
+.hidden { display: none !important; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+@keyframes parpadeo { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+@keyframes latido { 0% { box-shadow: 0 0 0 0 rgba(220,38,38,.55); } 70% { box-shadow: 0 0 0 14px rgba(220,38,38,0); } 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0); } }
+.blink { animation: parpadeo 1.1s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .blink, .mk.blink, .dia-panel.blink .dia-banda, .obra-fila.rojo { animation: none !important; }
+  .cinta-pista { animation-duration: 0s !important; }
+}
+
+/* ─────────────────────────────────────────────────
+   LOGIN — de PreKOM v9.1.1
+───────────────────────────────────────────────── */
+.pantalla-centrada { display: none; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 24px; padding: 20px; }
+.pantalla-centrada.visible { display: flex; }
+.caja { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 40px 36px; max-width: 380px; width: 100%; text-align: center; box-shadow: var(--shadow-md); }
+.caja-logo    { font-family: 'Bebas Neue', sans-serif; font-size: 1.9rem; color: var(--accent); letter-spacing: .5px; margin-bottom: 4px; }
+.logo-pre     { font-size: 1em; }   /* v17.0.1 — CLIMA OBRA parejo: mismo tamaño que OBRA */
+.logo-kom     { font-size: 1em; }
+.caja-version { font-size: .62rem; color: var(--muted); letter-spacing: .03em; margin-bottom: 4px; }
+.caja-sub     { font-size: .78rem; color: var(--muted); margin-bottom: 28px; }
+.caja-title   { font-size: 1rem; font-weight: 600; margin-bottom: 6px; }
+.caja-desc    { font-size: .8rem; color: var(--muted); margin-bottom: 22px; line-height: 1.6; }
+.login-paso { display: none; }
+.login-paso.activo { display: block; }
+.input-email, .input-pin { width: 100%; padding: 11px 14px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); font-size: .9rem; color: var(--text); margin-bottom: 14px; text-align: center; transition: border-color .15s; }
+.input-email:focus, .input-pin:focus { outline: none; border-color: var(--accent); }
+.input-pin { font-size: 1.4rem; letter-spacing: 6px; font-family: monospace; }
+.btn-accion { width: 100%; padding: 10px 18px; border: 1px solid var(--accent-border); border-radius: var(--radius-sm); background: var(--accent); color: #fff; font-size: .82rem; font-weight: 600; transition: background .15s; }
+.btn-accion:hover:not(:disabled) { background: #b45309; }
+.btn-accion:disabled { opacity: .5; cursor: not-allowed; }
+.btn-secundario { width: 100%; padding: 9px 16px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); color: var(--muted); font-size: .78rem; margin-top: 10px; transition: all .15s; }
+.btn-secundario:hover:not(:disabled) { background: #f8fafc; }
+.btn-secundario:disabled { opacity: .5; cursor: not-allowed; }
+.msg-error { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; border-radius: var(--radius-sm); padding: 9px 12px; font-size: .78rem; margin-bottom: 14px; text-align: left; display: none; }
+.msg-error.visible { display: block; }
+.spinner { width: 28px; height: 28px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; margin: 0 auto 16px; animation: girar .8s linear infinite; }
+@keyframes girar { to { transform: rotate(360deg); } }
+
+/* ─────────────────────────────────────────────────
+   HEADER — de PreKOM v9.1.1
+───────────────────────────────────────────────── */
+#app { display: none; flex-direction: column; min-height: 100%; padding-bottom: var(--cinta-h); }
+#app-header {
+  min-height: var(--header-h); background: var(--accent2); display: flex; align-items: center; flex-wrap: wrap;
+  padding: 8px 18px; gap: 8px 12px; flex-shrink: 0; border-bottom: 1px solid rgba(255,255,255,.06);
+  position: sticky; top: 0; z-index: 1000;
+}
+.hdr-logo { font-family: 'Bebas Neue', sans-serif; font-size: 1.35rem; color: var(--accent); letter-spacing: .3px; white-space: nowrap; }
+.hdr-version { font-size: .62rem; color: rgba(255,255,255,.4); white-space: nowrap; }
+.hdr-nav { display: flex; gap: 4px; }
+.hdr-nav-btn { background: transparent; border: 1px solid rgba(255,255,255,.18); color: rgba(255,255,255,.6); border-radius: var(--radius-sm); padding: 5px 14px; font-size: .74rem; font-weight: 600; white-space: nowrap; transition: all .15s; }
+.hdr-nav-btn:hover { border-color: var(--accent); color: var(--accent); }
+.hdr-nav-btn.active { background: var(--accent); border-color: var(--accent-border); color: #fff; }
+.hdr-btn { background: transparent; border: 1px solid rgba(255,255,255,.18); color: rgba(255,255,255,.6); border-radius: var(--radius-sm); padding: 4px 10px; font-size: .68rem; transition: all .15s; white-space: nowrap; position: relative; }
+.hdr-btn:hover { border-color: var(--accent); color: var(--accent); }
+.hdr-btn-lapiz { border-color: var(--accent); color: var(--accent); }
+.hdr-btn-lapiz:hover, .hdr-btn-lapiz.activo { background: var(--accent); color: #fff; }
+.hdr-select { background: #1e293b; border: 1px solid rgba(255,255,255,.18); color: #fff; border-radius: var(--radius-sm); padding: 4px 8px; font-size: .74rem; max-width: 260px; }
+.hdr-sep { flex: 1; }
+.hdr-email { font-size: .72rem; color: rgba(255,255,255,.4); white-space: nowrap; cursor: pointer; }
+.badge-campana { position: absolute; top: -6px; right: -6px; background: var(--danger); color: #fff; border-radius: 99px; font-size: .6rem; font-weight: 700; min-width: 16px; height: 16px; line-height: 16px; padding: 0 4px; text-align: center; }
+
+/* ─────────────────────────────────────────────────
+   LÁPIZ GLOBAL v2.1 — de PreKOM v9.1.1
+───────────────────────────────────────────────── */
+.lpz-canvas { position:absolute; top:0; left:0; z-index:9990; pointer-events:none; touch-action:none; }
+.lpz-canvas.activo { pointer-events:auto; cursor:crosshair; }
+.lpz-bar { position:fixed; bottom:48px; left:50%; transform:translateX(-50%); z-index:9991; display:none; align-items:center; gap:10px; background:rgba(15,23,42,.95); border:1px solid #334155; border-radius:14px; padding:8px 14px; box-shadow:0 8px 30px rgba(0,0,0,.45); font-family:'DM Sans',sans-serif; }
+.lpz-bar.show { display:flex; }
+.lpz-bar-handle { cursor:grab; color:#64748b; font-size:16px; padding:0 4px; user-select:none; }
+.lpz-bar-handle:active { cursor:grabbing; }
+.lpz-color-dot { width:20px; height:20px; border-radius:50%; border:2px solid transparent; cursor:pointer; box-sizing:border-box; }
+.lpz-color-dot.activo { border-color:#fff; box-shadow:0 0 0 2px #0f172a, 0 0 0 3px #fff; }
+.lpz-grosor-dot { width:24px; height:24px; border-radius:50%; background:#1e293b; border:1px solid #334155; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+.lpz-grosor-dot span { display:block; border-radius:50%; background:#94a3b8; }
+.lpz-grosor-dot.activo { border-color:#fff; background:#334155; }
+.lpz-grosor-dot.activo span { background:#fff; }
+.lpz-bar-btn { font-size:9px; font-weight:900; text-transform:uppercase; letter-spacing:.06em; padding:6px 12px; border-radius:99px; border:1px solid #ef4444; color:#ef4444; background:transparent; cursor:pointer; white-space:nowrap; }
+.lpz-bar-btn:hover { background:#ef4444; color:#fff; }
+.lpz-bar-close { color:#64748b; cursor:pointer; font-size:16px; padding:0 4px; }
+.lpz-bar-close:hover { color:#fff; }
+.lpz-modo-btn { width:26px; height:26px; border-radius:8px; display:flex; align-items:center; justify-content:center; background:#1e293b; border:1px solid #334155; color:#94a3b8; cursor:pointer; font-size:14px; }
+.lpz-modo-btn.activo { background:#334155; border-color:#fff; color:#fff; }
+.lpz-bar-sep { width:1px; align-self:stretch; background:#334155; }
+
+/* ─────────────────────────────────────────────────
+   VISTA MAPA
+───────────────────────────────────────────────── */
+.view { width: 100%; max-width: 1680px; margin: 0 auto; padding: 18px 22px 28px; }
+#vista-mapa { display: grid; grid-template-columns: 1fr 340px; gap: 0; height: calc(100vh - var(--header-h) - var(--cinta-h) - var(--franja-h, 0px)); }
+#mapa { width: 100%; height: 100%; background: #dbe4ee; }
+.mapa-lado { background: var(--surface); border-left: 1px solid var(--border); overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.mapa-lado-tit { font-family: 'Bebas Neue', sans-serif; font-size: 1.25rem; color: var(--accent2); }
+.mapa-ley { display: flex; flex-wrap: wrap; gap: 10px; font-size: .7rem; color: var(--muted); }
+.mapa-ley span { display: inline-flex; align-items: center; gap: 5px; }
+.punto { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; }
+.obra-fila { border: 1px solid var(--border); border-left: 5px solid var(--st-ok); border-radius: var(--radius-sm); padding: 10px 12px; cursor: pointer; background: var(--surface); text-align: left; width: 100%; }
+.obra-fila:hover { background: #fffbeb; }
+.obra-fila.rojo { border-left-color: var(--st-alerta); animation: barraLate 1.4s ease-in-out infinite; }
+@keyframes barraLate { 0%, 100% { border-left-color: var(--st-alerta); box-shadow: inset 4px 0 0 rgba(220,38,38,0); } 50% { border-left-color: #fca5a5; box-shadow: inset 4px 0 0 rgba(220,38,38,.18); } }
+.obra-fila.naranja { border-left-color: var(--st-pasado); }
+.obra-fila-nom { font-weight: 700; font-size: .86rem; }
+.obra-fila-cod { color: var(--muted); font-weight: 500; margin-right: 4px; }
+.obra-fila-dias { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
+.mini-dia { border-radius: 6px; padding: 4px 6px; font-size: .68rem; background: #f8fafc; border: 1px solid var(--border); line-height: 1.3; }
+.mini-dia b { display: block; font-size: .64rem; color: var(--muted); font-weight: 700; }
+.mini-dia.rojo { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+.mini-dia.naranja { background: #fefce8; border-color: #facc15; color: var(--st-pasado-txt); }
+.mini-dia.perdido { background: #fdf2f2; border-color: var(--st-perdido); color: var(--st-perdido); }
+.mini-dia.trabajo { background: #f0fdfa; border-color: #99f6e4; color: var(--st-trabajo); }
+/* marcadores */
+.mk-wrap { background: none; border: none; }
+.mk { width: 22px; height: 22px; border-radius: 50%; border: 3px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.4); background: var(--st-ok); }
+.mk.naranja { background: var(--st-pasado); }
+.mk-ver-todo { width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; background: #fff; color: #333; font-size: 1.05rem; cursor: pointer; border: none; }
+.mk-ver-todo:hover { background: #f4f4f4; }
+.mk.rojo { background: var(--st-alerta); }
+.mk.blink { animation: latido 1.4s ease-out infinite; }
+.leaflet-tooltip.mk-etq { background: var(--accent2); color: #fff; border: none; border-radius: 6px; font-family: 'DM Sans', sans-serif; font-size: .72rem; font-weight: 600; padding: 3px 8px; box-shadow: var(--shadow-md); }
+.leaflet-tooltip.mk-etq::before { display: none; }
+.leaflet-tooltip.mk-etq.rojo { background: var(--st-alerta); }
+.leaflet-tooltip.mk-etq.naranja { background: var(--st-pasado); color: #422006; }
+
+/* ─────────────────────────────────────────────────
+   VISTA OBRA (dashboard)
+───────────────────────────────────────────────── */
+.obra-cab { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 18px; margin-bottom: 14px; }
+.obra-tit { font-family: 'Bebas Neue', sans-serif; font-size: 2.1rem; line-height: 1; color: var(--accent2); }
+.obra-tit small { color: var(--muted); font-size: .6em; margin-right: 6px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: .7rem; padding: 3px 9px; border-radius: 99px; background: var(--surface); border: 1px solid var(--border); color: var(--muted); white-space: nowrap; }
+.chip strong { color: var(--text); }
+.obra-fuente { font-size: .7rem; color: var(--muted); margin-left: auto; }
+.dias-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
+
+.dia-panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; position: relative; }
+.dia-banda { height: 6px; background: var(--st-ok); }
+.dia-panel.alerta .dia-banda { background: var(--st-alerta); }
+.dia-panel.pasado .dia-banda { background: var(--st-pasado); }
+.dia-panel.perdido .dia-banda { background: var(--st-perdido); }
+.dia-panel.trabajo .dia-banda { background: var(--st-trabajo); }
+.dia-panel.hist .dia-banda { background: var(--st-hist); }
+.dia-panel.blink .dia-banda { animation: parpadeo 1.1s ease-in-out infinite; }
+.dia-panel.alerta { border-color: #fecaca; }
+.dia-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 12px 16px 6px; }
+.dia-nom { font-family: 'Bebas Neue', sans-serif; font-size: 2.4rem; line-height: .9; color: var(--accent2); }
+.dia-fecha { font-size: .8rem; color: var(--muted); font-weight: 600; }
+.estado { font-size: .7rem; font-weight: 700; padding: 3px 10px; border-radius: 99px; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; }
+.estado.ok { background: #f0fdf4; color: #166534; }
+.estado.alerta { background: var(--st-alerta); color: #fff; }
+.estado.pasado { background: #fef9c3; color: var(--st-pasado-txt); border: 1px solid #facc15; }
+.estado.perdido { background: var(--st-perdido); color: #fff; }
+.estado.trabajo { background: #f0fdfa; color: var(--st-trabajo); border: 1px solid #99f6e4; }
+.estado.hist { background: #fefce8; color: var(--st-hist); border: 1px solid #fde68a; }
+.estado .punto { width: 7px; height: 7px; background: currentColor; }
+.dia-causas { display: flex; flex-direction: column; gap: 4px; padding: 2px 16px 10px; }
+.causa { display: flex; align-items: center; gap: 8px; font-size: .82rem; font-weight: 600; color: #991b1b; }
+.causa i { font-size: 1.05rem; }
+.causa .causa-hora { font-weight: 500; color: var(--muted); font-size: .74rem; }
+.dia-panel.pasado .causa { color: var(--st-pasado-txt); }
+.dia-panel.hist .causa { color: var(--st-hist); }
+.sin-causas { font-size: .78rem; color: var(--muted); }
+
+.evo { margin: 0 16px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; }
+.evo-tit { font-size: .68rem; color: var(--muted); padding: 5px 10px; background: #f8fafc; border-bottom: 1px solid var(--border); }
+.evo table { width: 100%; border-collapse: collapse; font-size: .72rem; }
+.evo th, .evo td { padding: 3px 8px; text-align: right; white-space: nowrap; }
+.evo th:first-child, .evo td:first-child { text-align: left; color: var(--muted); font-weight: 500; }
+.evo th { font-weight: 700; color: var(--muted); font-size: .66rem; }
+.evo td.ult { font-weight: 700; color: var(--text); }
+.evo td.cruza { color: var(--st-alerta); font-weight: 700; }
+/* v17.0.4 — tendencia por fila + calidad del pronóstico */
+.evo-tit { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.evo th.hoy-col { color: var(--accent); }
+.evo td.tend, .evo th.tend { text-align: center; width: 34px; padding-left: 4px; padding-right: 6px; }
+.tend-fl { font-size: .95rem; font-weight: 700; line-height: 1; }
+.tend-fl.peor { color: var(--st-alerta); }
+.tend-fl.mejor { color: var(--st-ok); }
+.tend-fl.igual, .tend-fl.neutro { color: #94a3b8; }
+.calidad { font-size: .64rem; font-weight: 700; padding: 1px 8px; border-radius: 99px; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; cursor: help; }
+.calidad .punto { width: 7px; height: 7px; background: currentColor; }
+.calidad.estable { background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; }
+.calidad.cambiante { background: #fef9c3; color: var(--st-pasado-txt); border: 1px solid #facc15; }
+.calidad.inestable { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+.evo-ley { font-size: .62rem; color: var(--muted); padding: 4px 10px; border-top: 1px solid var(--border); background: #f8fafc; }
+
+.bloques { padding: 0 16px 8px; }
+.bloques-cab, .bloque { display: grid; grid-template-columns: 46px 22px 1fr 1fr 1fr; gap: 8px; align-items: center; }
+.bloques-cab { font-size: .64rem; font-weight: 700; color: var(--muted); padding: 4px 0; border-bottom: 1px solid var(--border); }
+.bloques-cab .c-temp { color: var(--bar-temp); } .bloques-cab .c-viento { color: var(--bar-viento); } .bloques-cab .c-lluvia { color: var(--bar-lluvia); }
+.bloque { padding: 6px 0; border-bottom: 1px solid #f1f5f9; }
+.bloque:last-child { border-bottom: none; }
+.bloque.fuera { opacity: .55; }
+.bloque.cruza { background: #fef2f2; margin: 0 -16px; padding-left: 16px; padding-right: 16px; }
+.bloque-hora { font-size: .78rem; font-weight: 700; color: var(--muted); }
+.bloque-ico { font-size: 1.05rem; color: var(--muted); text-align: center; }
+.medida { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.medida-val { font-size: .74rem; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.medida-val small { font-weight: 500; color: var(--muted); }
+.medida.temp .medida-val { color: var(--bar-temp); } .medida.viento .medida-val { color: var(--bar-viento); } .medida.lluvia .medida-val { color: var(--bar-lluvia); }
+.medida.cruza .medida-val { color: var(--st-alerta); }
+.barra { height: 5px; background: var(--bar-fondo); border-radius: 99px; overflow: hidden; }
+.barra > span { display: block; height: 100%; border-radius: 99px; }
+.medida.temp .barra > span { background: var(--bar-temp); } .medida.viento .barra > span { background: var(--bar-viento); } .medida.lluvia .barra > span { background: var(--bar-lluvia); }
+.medida.cruza .barra > span { background: var(--st-alerta); }
+.sin-datos { padding: 18px 16px; font-size: .8rem; color: var(--muted); text-align: center; }
+
+.dia-pie { border-top: 1px solid var(--border); padding: 10px 16px; background: #f8fafc; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.dia-pie-nota { font-size: .74rem; color: var(--muted); flex: 1; min-width: 150px; }
+.decision { font-size: .78rem; flex: 1; min-width: 180px; }
+.decision strong { display: block; }
+.decision span { color: var(--muted); font-size: .72rem; }
+.btn-chico { border: 1px solid var(--accent-border); background: var(--accent); color: #fff; border-radius: var(--radius-sm); padding: 6px 12px; font-size: .74rem; font-weight: 700; white-space: nowrap; }
+.btn-chico:hover { background: #b45309; }
+.btn-chico.sec { background: var(--surface); color: var(--text); border-color: var(--border); }
+.btn-chico.sec:hover { background: var(--bg); }
+.pista { width: 100%; font-size: .72rem; background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; border-radius: 6px; padding: 5px 8px; }
+
+/* ─────────────────────────────────────────────────
+   VISTA CALENDARIO
+───────────────────────────────────────────────── */
+.cal-cab { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+.cal-mes { font-family: 'Bebas Neue', sans-serif; font-size: 1.9rem; color: var(--accent2); min-width: 200px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.cal-dsem { font-size: .7rem; font-weight: 700; color: var(--muted); text-align: center; padding: 2px 0; }
+.cal-dia { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); min-height: 78px; padding: 6px 8px; text-align: left; display: flex; flex-direction: column; gap: 4px; position: relative; }
+.cal-dia:hover { border-color: var(--accent); }
+.cal-dia.vacio { background: transparent; border: none; pointer-events: none; }
+.cal-dia.hoy { box-shadow: inset 0 0 0 2px var(--accent); }
+.cal-num { font-weight: 700; font-size: .82rem; }
+.cal-dia.sin-datos-dia .cal-num { color: #cbd5e1; }
+.cal-tag { font-size: .64rem; font-weight: 700; border-radius: 4px; padding: 1px 5px; align-self: flex-start; }
+.cal-tag.ok { background: #dcfce7; color: #166534; }
+.cal-tag.alerta { background: var(--st-alerta); color: #fff; }
+.cal-tag.pasado { background: var(--st-pasado); color: #422006; }
+.cal-tag.perdido { background: var(--st-perdido); color: #fff; }
+.cal-tag.trabajo { background: #ccfbf1; color: var(--st-trabajo); }
+.cal-tag.hist { background: #fef3c7; color: var(--st-hist); }
+.cal-ico { font-size: .9rem; color: var(--muted); display: flex; gap: 3px; }
+.cal-notif { position: absolute; top: 5px; right: 6px; color: #2563eb; font-size: .85rem; }
+.cal-ley { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px; font-size: .72rem; color: var(--muted); }
+.cal-ley span { display: inline-flex; align-items: center; gap: 5px; }
+
+/* ─────────────────────────────────────────────────
+   CINTA DE NOVEDADES
+───────────────────────────────────────────────── */
+#cinta { position: fixed; left: 0; right: 0; bottom: 0; height: var(--cinta-h); background: var(--accent2); color: #e2e8f0; display: flex; align-items: center; overflow: hidden; z-index: 900; border-top: 2px solid var(--accent); }
+.cinta-rot { flex: none; background: var(--accent); color: #fff; font-family: 'Bebas Neue', sans-serif; font-size: 1rem; letter-spacing: .5px; padding: 0 12px; height: 100%; display: flex; align-items: center; z-index: 1; }
+.cinta-vent { flex: 1; overflow: hidden; height: 100%; display: flex; align-items: center; }
+.cinta-pista { display: inline-flex; gap: 38px; white-space: nowrap; padding-left: 100%; animation: correr linear infinite; font-size: .8rem; }
+#cinta:hover .cinta-pista { animation-play-state: paused; }
+@keyframes correr { from { transform: translateX(0); } to { transform: translateX(-100%); } }
+.cinta-item b { color: #fff; }
+.cinta-item.alerta b { color: #fca5a5; }
+
+/* ─────────────────────────────────────────────────
+   PANEL 🔔, MODALES, DIÁLOGOS, TOAST
+───────────────────────────────────────────────── */
+.cortina { position: fixed; inset: 0; background: rgba(15,23,42,.45); z-index: 1100; display: none; }
+.cortina.visible { display: block; }
+#panel-notif { position: fixed; top: 0; right: 0; bottom: 0; width: min(420px, 100vw); background: var(--surface); z-index: 1101; box-shadow: -8px 0 30px rgba(0,0,0,.2); transform: translateX(105%); transition: transform .2s ease; display: flex; flex-direction: column; }
+#panel-notif.visible { transform: translateX(0); }
+.panel-head { background: var(--accent2); color: #fff; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; }
+.panel-head h3 { font-size: 1rem; font-weight: 600; }
+.panel-cerrar { background: none; border: none; color: rgba(255,255,255,.6); font-size: 20px; line-height: 1; }
+.panel-body { overflow-y: auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+.notif { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 10px 12px; }
+.notif.pendiente { border-left: 4px solid #2563eb; }
+.notif-tit { font-weight: 700; font-size: .84rem; }
+.notif-meta { font-size: .7rem; color: var(--muted); margin: 2px 0 6px; }
+.notif-det { font-size: .78rem; margin-bottom: 8px; white-space: pre-wrap; }
+.notif-acc { display: flex; gap: 6px; flex-wrap: wrap; }
+.vacio-txt { font-size: .82rem; color: var(--muted); text-align: center; padding: 30px 10px; }
+
+.modal-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.5); display: none; align-items: center; justify-content: center; padding: 20px; z-index: 1200; }
+.modal-overlay.visible { display: flex; }
+.modal-box { background: var(--surface); border-radius: 14px; width: 100%; max-width: 460px; box-shadow: var(--shadow-md); overflow: hidden; max-height: 92vh; display: flex; flex-direction: column; }
+.modal-box.ancho { max-width: 560px; }
+.modal-head { background: var(--accent2); color: #fff; padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; }
+.modal-head h3 { font-size: 1rem; font-weight: 600; }
+.modal-close { background: none; border: none; color: rgba(255,255,255,.5); font-size: 20px; line-height: 1; }
+.modal-close:hover { color: #fff; }
+.modal-body { padding: 18px 20px; overflow-y: auto; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; padding: 12px 20px; border-top: 1px solid var(--border); background: #f8fafc; }
+.campo { margin-bottom: 14px; }
+.campo-lbl { font-size: .74rem; font-weight: 700; color: var(--muted); margin-bottom: 6px; display: block; }
+.opciones { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.opcion { border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 10px 8px; background: var(--surface); text-align: center; font-size: .78rem; font-weight: 600; color: var(--text); }
+.opcion i { display: block; font-size: 1.3rem; margin-bottom: 2px; color: var(--muted); }
+.opcion.sel { border-color: var(--accent); background: #fffbeb; }
+.opcion.sel i { color: var(--accent); }
+.opcion.sel.trabajo { border-color: var(--st-trabajo); background: #f0fdfa; }
+.opcion.sel.trabajo i { color: var(--st-trabajo); }
+.rango { display: flex; align-items: center; gap: 8px; font-size: .82rem; }
+.rango select { padding: 6px 8px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); font-size: .84rem; }
+.causas-sel { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip-sel { border: 1.5px solid var(--border); border-radius: 99px; padding: 5px 12px; background: var(--surface); font-size: .78rem; font-weight: 600; color: var(--muted); display: inline-flex; align-items: center; gap: 5px; }
+.chip-sel.sel { border-color: var(--accent); background: var(--accent); color: #fff; }
+.campo textarea { width: 100%; min-height: 70px; border: 1.5px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; font-size: .84rem; resize: vertical; }
+.calculo { font-size: .8rem; background: var(--tag-bg); color: var(--tag-fg); border-radius: var(--radius-sm); padding: 8px 10px; }
+.decision-actual { font-size: .78rem; background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; margin-bottom: 14px; }
+.modal-detalle .dia-panel { box-shadow: none; border: none; }
+
+#session-dialog-overlay { display: none; position: fixed; inset: 0; background: rgba(15,23,42,.4); z-index: 1300; align-items: center; justify-content: center; }
+#session-dialog-overlay.visible { display: flex; }
+.session-dialog { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow-md); padding: 24px; max-width: 320px; width: 100%; }
+.session-dialog-title { font-size: .9rem; font-weight: 600; margin-bottom: 14px; }
+.session-dialog-row { display: flex; justify-content: space-between; gap: 10px; font-size: .78rem; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.session-dialog-label { color: var(--muted); }
+.btn-cerrar-sesion { width: 100%; margin-top: 16px; padding: 9px; border-radius: var(--radius-sm); border: 1px solid #fecaca; background: #fef2f2; color: #991b1b; font-size: .78rem; font-weight: 600; }
+.btn-cerrar-sesion:hover { background: #fee2e2; }
+
+#dialogo-overlay { display: none; position: fixed; inset: 0; background: rgba(15,23,42,.4); z-index: 1400; align-items: center; justify-content: center; }
+#dialogo-overlay.visible { display: flex; }
+.dialogo-caja { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow-md); padding: 22px; max-width: 340px; width: 100%; }
+.dialogo-title { font-size: .9rem; font-weight: 700; margin-bottom: 8px; }
+.dialogo-desc { font-size: .8rem; line-height: 1.6; margin-bottom: 18px; }
+.dialogo-botones { display: flex; gap: 10px; }
+.dialogo-botones button { flex: 1; padding: 9px; border-radius: var(--radius-sm); font-size: .8rem; font-weight: 600; border: 1px solid var(--border); }
+.btn-dialogo-cancelar { background: var(--surface); color: var(--text); }
+.btn-dialogo-aceptar { background: var(--accent); color: #fff; border-color: var(--accent) !important; }
+.btn-dialogo-danger { background: var(--danger); color: #fff; border-color: var(--danger) !important; }
+
+.toast { position: fixed; left: 50%; bottom: 48px; transform: translateX(-50%) translateY(12px); background: var(--accent2); color: #fff; font-size: .78rem; font-weight: 600; padding: 10px 18px; border-radius: 99px; box-shadow: var(--shadow-md); opacity: 0; pointer-events: none; transition: opacity .2s ease, transform .2s ease; z-index: 1500; white-space: nowrap; }
+.toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+.cargando { padding: 60px 20px; text-align: center; color: var(--muted); font-size: .85rem; }
+
+/* v17.0.3 — carrusel de obras (Pronóstico) */
+.carrusel-flecha { position: fixed; top: 50%; transform: translateY(-50%); z-index: 800; width: 46px; height: 82px; border-radius: 12px; border: 1px solid var(--border); background: rgba(255,255,255,.92); color: var(--accent2); font-size: 1.9rem; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-md); }
+.carrusel-flecha:hover { background: var(--accent); color: #fff; border-color: var(--accent-border); }
+.carrusel-flecha.izq { left: 8px; } .carrusel-flecha.der { right: 8px; }
+.carrusel-pos { font-size: .72rem; color: var(--muted); font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+.carrusel-barra { width: 60px; height: 4px; background: var(--border); border-radius: 99px; overflow: hidden; display: inline-block; }
+.carrusel-barra > span { display: block; height: 100%; background: var(--accent); width: 0; }
+body.con-carrusel #vista-obra { padding-left: 68px; padding-right: 68px; }   /* las flechas quedan en el margen, sin tapar los paneles */
+@media (max-width: 560px) { body.con-carrusel #vista-obra { padding-left: 12px; padding-right: 12px; } .carrusel-flecha { width: 34px; height: 60px; font-size: 1.4rem; top: auto; bottom: 46px; transform: none; } }
+/* v17.0.2 — franja de pronóstico desactualizado */
+.franja-desact { background: var(--tag-bg); color: var(--tag-fg); border-bottom: 1px solid #fcd34d; padding: 8px 18px; font-size: .8rem; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.franja-desact i { font-size: 1.05rem; }
+/* pantalla completa (sala de reuniones): sin email ni versión */
+body.pantalla-completa .hdr-email, body.pantalla-completa .hdr-version { display: none; }
+
+/* ─────────────────────────────────────────────────
+   RESPONSIVE
+───────────────────────────────────────────────── */
+@media (max-width: 1100px) { .dias-grid { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 860px) {
+  #vista-mapa { grid-template-columns: 1fr; height: auto; }
+  #mapa { height: 52vh; }
+  .mapa-lado { border-left: none; border-top: 1px solid var(--border); }
+  .dias-grid { grid-template-columns: 1fr; }
+  .obra-fuente { margin-left: 0; width: 100%; }
+}
+@media (max-width: 560px) {
+  #app-header { padding: 8px 12px; }
+  .view { padding: 14px 12px 24px; }
+  .hdr-email, .hdr-version, #btn-pantalla { display: none; }
+  .cal-dia { min-height: 56px; padding: 4px; }
+  .cal-tag { font-size: .56rem; padding: 0 3px; }
+  .cal-ico { display: none; }
+  .opciones { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══════════════ LOGIN ═══════════════ -->
+<div id="login-screen" class="pantalla-centrada">
+  <div class="caja">
+    <div class="caja-logo"><span class="logo-pre">Clima</span> <span class="logo-kom">Obra</span></div>
+    <div class="caja-version" id="version-label"></div>
+    <div class="caja-sub">Pronóstico y días perdidos por obra</div>
+
+    <div id="paso-email" class="login-paso activo">
+      <div class="caja-title">Ingresá tu email</div>
+      <div class="caja-desc">Te vamos a enviar un código de acceso.</div>
+      <div id="login-error-email" class="msg-error"></div>
+      <input type="email" id="input-email" class="input-email" placeholder="nombre@empresa.com" autocomplete="email">
+      <button class="btn-accion" id="btn-pedir-pin">Enviar código</button>
+    </div>
+
+    <div id="paso-codigo" class="login-paso">
+      <div class="caja-title">Ingresá el código</div>
+      <div class="caja-desc">Te enviamos un código a <strong id="email-confirmado"></strong>. Vence en 10 minutos.</div>
+      <div id="login-error-pin" class="msg-error"></div>
+      <input type="text" id="input-pin" class="input-pin" maxlength="10" inputmode="numeric" autocomplete="one-time-code" placeholder="········">
+      <button class="btn-accion" id="btn-validar-pin">Ingresar</button>
+      <button class="btn-secundario" id="btn-reenviar-pin">Reenviar código</button>
+      <button class="btn-secundario" id="btn-cambiar-email" style="margin-top:6px">Usar otro email</button>
+    </div>
+
+    <div id="paso-validando" class="login-paso">
+      <div class="spinner"></div>
+      <div class="caja-desc" style="margin-bottom:0">Validando usuario…</div>
+    </div>
+
+    <div id="paso-sin-conexion" class="login-paso">
+      <div class="caja-desc">No pudimos conectar con el servidor. Reintentá cuando tengas conexión.</div>
+      <button class="btn-accion" id="btn-reintentar-conexion">Reintentar</button>
+    </div>
+
+    <div id="paso-error-auth" class="login-paso">
+      <div class="caja-desc" id="texto-error-auth"></div>
+      <button class="btn-accion" id="btn-volver-email">Volver</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ APP ═══════════════ -->
+<div id="app">
+  <header id="app-header">
+    <div class="hdr-logo"><span class="logo-pre">Clima</span> <span class="logo-kom">Obra</span></div>
+    <div class="hdr-version" id="version-label-app"></div>
+    <nav class="hdr-nav">
+      <button class="hdr-nav-btn" id="nav-mapa" data-vista="mapa"><i class="ti ti-map-2"></i> Mapa</button>
+      <button class="hdr-nav-btn" id="nav-obra" data-vista="obra"><i class="ti ti-layout-columns"></i> Pronóstico</button>
+      <button class="hdr-nav-btn" id="nav-calendario" data-vista="calendario"><i class="ti ti-calendar"></i> Calendario</button>
+    </nav>
+    <select class="hdr-select" id="sel-obra" aria-label="Obra"></select>
+    <button class="hdr-btn" id="btn-campana" title="Notificaciones"><i class="ti ti-bell"></i><span class="badge-campana hidden" id="badge-campana">0</span></button>
+    <button class="hdr-btn" id="btn-pantalla" title="Pantalla completa (sala de reuniones)"><i class="ti ti-maximize"></i></button>
+    <button class="hdr-btn hdr-btn-lapiz" id="btn-lapiz-toggle" onclick="lapizToggle()" title="Lápiz — anotar sobre la pantalla (Esc para salir)"><i class="ti ti-pencil"></i> Lápiz</button>
+    <div class="hdr-sep"></div>
+    <div class="hdr-email" id="hdr-email" title="Sesión (Ctrl+Alt+U)"></div>
+  </header>
+
+  <div id="franja-desact" class="franja-desact hidden" role="status"><i class="ti ti-alert-triangle"></i><span id="franja-desact-txt"></span></div>
+
+  <section id="vista-mapa" class="hidden">
+    <div id="mapa"></div>
+    <aside class="mapa-lado">
+      <div class="mapa-lado-tit">Tus obras · hoy, mañana y pasado</div>
+      <div class="mapa-ley">
+        <span><i class="punto" style="background:var(--st-ok)"></i> Sin alertas</span>
+        <span><i class="punto" style="background:var(--st-pasado)"></i> Alerta pasado mañana</span>
+        <span><i class="punto" style="background:var(--st-alerta)"></i> Alerta hoy o mañana</span>
+      </div>
+      <div id="mapa-lista"></div>
+    </aside>
+  </section>
+
+  <main id="vista-obra" class="view hidden"></main>
+  <button class="carrusel-flecha izq hidden" id="car-izq" title="Obra anterior (←)" aria-label="Obra anterior"><i class="ti ti-chevron-left"></i></button>
+  <button class="carrusel-flecha der hidden" id="car-der" title="Obra siguiente (→)" aria-label="Obra siguiente"><i class="ti ti-chevron-right"></i></button>
+  <main id="vista-calendario" class="view hidden"></main>
+  <div id="vista-cargando" class="cargando"><div class="spinner"></div>Cargando tus obras…</div>
+</div>
+
+<!-- ═══════════════ CINTA ═══════════════ -->
+<div id="cinta" class="hidden">
+  <div class="cinta-rot">Novedades</div>
+  <div class="cinta-vent"><div class="cinta-pista" id="cinta-pista"></div></div>
+</div>
+
+<!-- ═══════════════ PANEL 🔔 ═══════════════ -->
+<div class="cortina" id="cortina-notif"></div>
+<aside id="panel-notif" aria-label="Notificaciones">
+  <div class="panel-head">
+    <h3><i class="ti ti-bell"></i> Notificaciones</h3>
+    <button class="panel-cerrar" id="btn-cerrar-notif" title="Cerrar">&times;</button>
+  </div>
+  <div class="panel-body" id="notif-lista"></div>
+</aside>
+
+<!-- ═══════════════ MODAL: detalle de un día (calendario) ═══════════════ -->
+<div class="modal-overlay" id="modal-detalle">
+  <div class="modal-box ancho">
+    <div class="modal-head"><h3 id="detalle-tit">Día</h3><button class="modal-close" onclick="cerrarModal('modal-detalle')">&times;</button></div>
+    <div class="modal-body modal-detalle" id="detalle-body" style="padding:0"></div>
+  </div>
+</div>
+
+<!-- ═══════════════ MODAL: confirmar / descartar ═══════════════ -->
+<div class="modal-overlay" id="modal-decidir">
+  <div class="modal-box">
+    <div class="modal-head"><h3 id="decidir-tit">Confirmar día</h3><button class="modal-close" onclick="cerrarModal('modal-decidir')">&times;</button></div>
+    <div class="modal-body">
+      <div id="decidir-actual" class="decision-actual hidden"></div>
+      <div class="campo">
+        <span class="campo-lbl">¿Qué pasó ese día?</span>
+        <div class="opciones">
+          <button type="button" class="opcion" data-op="total"><i class="ti ti-ban"></i>Perdido total</button>
+          <button type="button" class="opcion" data-op="parcial"><i class="ti ti-clock-pause"></i>Perdido parcial</button>
+          <button type="button" class="opcion trabajo" data-op="descartado"><i class="ti ti-tool"></i>Se trabajó</button>
+        </div>
+      </div>
+      <div class="campo hidden" id="campo-rango">
+        <span class="campo-lbl">Horas perdidas</span>
+        <div class="rango">de <select id="sel-desde"></select> a <select id="sel-hasta"></select> h</div>
+      </div>
+      <div class="campo hidden" id="campo-causas">
+        <span class="campo-lbl">Causa</span>
+        <div class="causas-sel">
+          <button type="button" class="chip-sel" data-causa="lluvia"><i class="ti ti-cloud-rain"></i> Lluvia</button>
+          <button type="button" class="chip-sel" data-causa="viento"><i class="ti ti-wind"></i> Viento</button>
+          <button type="button" class="chip-sel" data-causa="temperatura"><i class="ti ti-temperature"></i> Temperatura</button>
+        </div>
+      </div>
+      <div class="campo">
+        <span class="campo-lbl">Observación</span>
+        <textarea id="txt-obs" maxlength="2000" placeholder="Qué se paró, a qué hora, quién lo decidió…"></textarea>
+      </div>
+      <div class="calculo hidden" id="decidir-calculo"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-chico sec hidden" id="btn-quitar-decision">Quitar decisión</button>
+      <span style="flex:1"></span>
+      <button class="btn-chico sec" onclick="cerrarModal('modal-decidir')">Cancelar</button>
+      <button class="btn-chico" id="btn-guardar-decision">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ SESIÓN (Ctrl+Alt+U) ═══════════════ -->
+<div id="session-dialog-overlay">
+  <div class="session-dialog">
+    <div class="session-dialog-title">Sesión actual</div>
+    <div class="session-dialog-row"><span class="session-dialog-label">Email</span><span id="sd-email"></span></div>
+    <div class="session-dialog-row"><span class="session-dialog-label">Nombre</span><span id="sd-nombre"></span></div>
+    <div class="session-dialog-row"><span class="session-dialog-label">Vence</span><span>No expira</span></div>
+    <button class="btn-cerrar-sesion" onclick="cerrarSesion()">Cerrar sesión en este dispositivo</button>
+  </div>
+</div>
+
+<div id="dialogo-overlay">
+  <div class="dialogo-caja">
+    <div class="dialogo-title" id="dialogo-title"></div>
+    <div class="dialogo-desc" id="dialogo-desc"></div>
+    <div class="dialogo-botones" id="dialogo-botones"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<!-- ═══════════════ LÁPIZ GLOBAL v2.1 ═══════════════ -->
+<canvas id="lpz-canvas" class="lpz-canvas"></canvas>
+<div class="lpz-bar" id="lpz-bar">
+  <span class="lpz-bar-handle" title="Arrastrar">⠿</span>
+  <div style="display:flex;gap:4px;">
+    <span class="lpz-modo-btn activo" data-modo="libre" onclick="lapizSetModo('libre', this)" title="Trazo libre"><i class="ti ti-pencil"></i></span>
+    <span class="lpz-modo-btn" data-modo="linea" onclick="lapizSetModo('linea', this)" title="Línea"><i class="ti ti-minus"></i></span>
+    <span class="lpz-modo-btn" data-modo="rectangulo" onclick="lapizSetModo('rectangulo', this)" title="Rectángulo"><i class="ti ti-square"></i></span>
+    <span class="lpz-modo-btn" data-modo="circulo" onclick="lapizSetModo('circulo', this)" title="Círculo"><i class="ti ti-circle"></i></span>
+  </div>
+  <span class="lpz-bar-sep"></span>
+  <div style="display:flex;gap:6px;">
+    <span class="lpz-color-dot activo" style="background:#ef4444" data-color="#ef4444" onclick="lapizSetColor('#ef4444', this)"></span>
+    <span class="lpz-color-dot" style="background:#f97316" data-color="#f97316" onclick="lapizSetColor('#f97316', this)"></span>
+    <span class="lpz-color-dot" style="background:#eab308" data-color="#eab308" onclick="lapizSetColor('#eab308', this)"></span>
+    <span class="lpz-color-dot" style="background:#22c55e" data-color="#22c55e" onclick="lapizSetColor('#22c55e', this)"></span>
+    <span class="lpz-color-dot" style="background:#38bdf8" data-color="#38bdf8" onclick="lapizSetColor('#38bdf8', this)"></span>
+    <span class="lpz-color-dot" style="background:#ffffff" data-color="#ffffff" onclick="lapizSetColor('#ffffff', this)"></span>
+  </div>
+  <div style="display:flex;gap:6px;">
+    <span class="lpz-grosor-dot" data-grosor="2" onclick="lapizSetGrosor(2, this)"><span style="width:4px;height:4px;"></span></span>
+    <span class="lpz-grosor-dot activo" data-grosor="4" onclick="lapizSetGrosor(4, this)"><span style="width:8px;height:8px;"></span></span>
+    <span class="lpz-grosor-dot" data-grosor="8" onclick="lapizSetGrosor(8, this)"><span style="width:12px;height:12px;"></span></span>
+  </div>
+  <button class="lpz-bar-btn" onclick="lapizBorrar()"><i class="ti ti-eraser"></i> Borrar marcas</button>
+  <span class="lpz-bar-sep"></span>
+  <span class="lpz-modo-btn" onclick="capturarPantalla()" title="Capturar pantalla (con las marcas dibujadas) — guarda un PNG"><i class="ti ti-camera"></i></span>
+  <span class="lpz-bar-close" onclick="lapizToggle()" title="Cerrar (Esc)">✕</span>
+</div>
+
+<script>
+// ============================================================
+// ClimaObra — index_co_v17_0_4.html
+// v17.0.4 (22-oct-2026) — panel "Cómo viene cambiando el pronóstico" más claro:
+//  · Columnas con la fecha de cada consulta ("20/10 · 21/10 · Hoy") en lugar de D-2/D-1/D-0.
+//  · Columna Tend. por medida: ↑ roja se acerca al umbral, ↓ verde se aleja, = sin cambio
+//    relevante (hasta 10 % de la escala). Medida sin umbral en la obra: flecha gris.
+//  · Calidad del pronóstico del día: Estable / Cambiante / Inestable, según el mayor
+//    rango (máx − mín) entre consultas en relación al umbral (≥ 20 % cambiante, ≥ 50 %
+//    inestable). Temperaturas contra una escala fija de 10 °C.
+// v17.0.3 (15-oct-2026) — modo sala de reuniones (prueba real de Ale):
+//  · Pronóstico: carrusel de obras con flechas ‹ › a los costados y teclado ← →,
+//    con "2 de 5". En pantalla completa pasa solo cada 30 s (las flechas reinician
+//    el contador; en pausa con un modal, la 🔔 o el Lápiz abiertos). Solo con más de una obra.
+//  · Mapa: botón "Ver todas las obras" bajo + / − (vuelve al encuadre inicial). El mapa
+//    ya no se re-encuadra solo con cada actualización (respeta el zoom del usuario).
+//  · Lista del mapa ordenada por gravedad (rojo → amarillo → verde) y la barra roja late.
+//  · Pasado mañana pasa de naranja a AMARILLO (semáforo): el naranja no se distinguía del
+//    rojo. Lo único que se mueve es lo urgente (rojo).
+// v17.0.2 (15-oct-2026) — franja ámbar "Pronóstico desactualizado": desde las 4:00, si
+//    alguna obra no tiene la consulta de hoy (CO Sync o wttr.in fallaron), lo dice arriba
+//    con la fecha de la última consulta. Se revisa también a las 4:05.
+// v17.0.1 (15-oct-2026) — prueba real de Ale:
+//  · Mapa: OpenStreetMap (CARTO pasó a pedir clave y mostraba "API KEY REQUIRED").
+//  · Calendario: etiqueta verde "Sin alertas" en los días con pronóstico y sin
+//    umbrales cruzados; el día vacío queda solo para "sin datos".
+//  · Logo "CLIMA OBRA" parejo (misma tipografía y tamaño), en header y login.
+// v17.0.0 (15-oct-2026) — PWA NUEVA sobre Supabase (Diseno_ClimaObra_v17_0_0.md).
+//  · Pronóstico de wttr.in en bloques de 3 h para hoy, mañana y pasado; lo
+//    consulta CO Sync a las 3:00 y la base evalúa los umbrales de cada obra.
+//  · Vistas: Mapa (si la persona tiene más de una obra; 🔴 que late con
+//    alerta hoy/mañana), Pronóstico (3 paneles con sus 8 bloques y la
+//    evolución D-2 → D-1 → D-0) y Calendario (un mes por obra).
+//  · Confirmar día perdido total/parcial (rango libre por hora → horas
+//    perdidas sobre la jornada) + causa + observación, o "Se trabajó".
+//    Perfil editar o superior. Solo hoy o días pasados.
+//  · 🔔 notificaciones entre PWA (goe_notificaciones) y cinta de novedades.
+//  · Supabase Realtime: confirmaciones, avisos y notificaciones llegan solos.
+//    Sin refresco periódico: además se recarga a las 0:00, a las 3:15 y al
+//    volver a la ventana.
+//  · Base visual, login por código (Supabase Auth, 6 a 10 dígitos) y Lápiz
+//    Global: PreKOM v9.1.1. Sin sw.js. Actividad en goe_actividad (app co).
+// ============================================================
+
+const APP_VERSION   = 'v17.0.4';
+const SUPABASE_URL  = 'https://uhuftsxrzwhmvzygcuvp.supabase.co';
+const SUPABASE_KEY  = 'sb_publishable_TCibRAnzgaDIbn_MIirw6w_FltKG8X3';
+const REDIRECT_MAIL = 'https://goeapp.github.io/co/';   // la plantilla del mail lo usa para poner "CLIMAOBRA"
+const sb = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true, storageKey: 'co-sb-auth' }
+}) : null;
+const COOLDOWN_SEG = 60;
+const SESION_ID = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'S' + Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
+const SESION_KEY = 'co_sesion';
+const OBRA_KEY   = 'co_obra_actual';
+const TZ = 'America/Argentina/Buenos_Aires';
+
+document.getElementById('version-label').textContent = APP_VERSION;
+document.getElementById('version-label-app').textContent = APP_VERSION;
+
+// ── ESTADO ───────────────────────────────────────────────────
+let emailActual = '', nombreActual = '';
+let inicio = null;            // respuesta de co_cargar_inicio
+let obraSel = null;           // obraId
+let vista = 'mapa';
+let detalleObra = null;       // respuesta de co_cargar_detalle (vista Pronóstico)
+let calMes = null;            // 'YYYY-MM'
+let calDias = null;           // días del calendario
+let mapa = null, capaMarcadores = null;
+let canalRT = null;
+let cooldownInterval = null;
+let decidirCtx = null;        // {obra, fecha, alerta, decision}
+let ultimaCarga = 0;
+
+// ── UTILIDADES ───────────────────────────────────────────────
+function escaparHtml(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function hoyAR() { return new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date()); }
+function sumarDias(iso, n) { const d = new Date(iso + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+function difDias(a, b) { return Math.round((new Date(a + 'T12:00:00Z') - new Date(b + 'T12:00:00Z')) / 86400000); }
+const DSEM = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+function ddmm(iso) { return iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) : ''; }
+function diaSem(iso) { return DSEM[new Date(iso + 'T12:00:00Z').getUTCDay()]; }
+function nombreDia(iso) {
+  const d = difDias(iso, inicio ? inicio.hoy : hoyAR());
+  return d === 0 ? 'Hoy' : d === 1 ? 'Mañana' : d === 2 ? 'Pasado' : d === -1 ? 'Ayer' : diaSem(iso) + ' ' + ddmm(iso);
+}
+function num(v, dec) { if (v === null || v === undefined || v === '') return '—'; const n = Number(v); return (dec ? n.toFixed(dec) : String(Math.round(n * 10) / 10)).replace('.', ','); }
+function hhmm(isoTs) {
+  if (!isoTs) return '';
+  const d = new Date(isoTs);
+  return new Intl.DateTimeFormat('es-AR', { timeZone: TZ, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).format(d);
+}
+function obraPorId(id) { return inicio ? inicio.obras.find(o => o.obraId === id) : null; }
+
+// causas de la base → texto, ícono y causa de confirmación
+const CAUSAS = {
+  lluvia: { ico: 'ti-cloud-rain', emo: '🌧', txt: c => 'Lluvia ' + num(c.valor) + ' mm en el día', corto: c => num(c.valor) + ' mm', conf: 'lluvia' },
+  viento: { ico: 'ti-wind', emo: '💨', txt: c => 'Viento ' + num(c.valor) + ' km/h', corto: c => num(c.valor) + ' km/h', conf: 'viento' },
+  rafaga: { ico: 'ti-tornado', emo: '🌬', txt: c => 'Ráfagas ' + num(c.valor) + ' km/h', corto: c => 'ráf. ' + num(c.valor), conf: 'viento' },
+  calor:  { ico: 'ti-temperature-sun', emo: '🌡', txt: c => 'Calor ' + num(c.valor) + ' °C', corto: c => num(c.valor) + ' °C', conf: 'temperatura' },
+  helada: { ico: 'ti-snowflake', emo: '❄', txt: c => 'Helada ' + num(c.valor) + ' °C', corto: c => num(c.valor) + ' °C', conf: 'temperatura' }
+};
+const CAUSA_CONF_TXT = { lluvia: 'lluvia', viento: 'viento', temperatura: 'temperatura' };
+
+/** Ícono de Tabler por código WWO. */
+function icoClima(cod, hora) {
+  const c = Number(cod);
+  const noche = hora !== undefined && (hora < 6 || hora >= 21);
+  if (!c) return 'ti-cloud-question';
+  if (c === 113) return noche ? 'ti-moon' : 'ti-sun';
+  if (c === 116) return noche ? 'ti-haze-moon' : 'ti-haze';
+  if (c === 119 || c === 122) return 'ti-cloud';
+  if ([143, 248, 260].includes(c)) return 'ti-mist';
+  if ([200, 386, 389, 392, 395].includes(c)) return 'ti-cloud-storm';
+  if ([179, 227, 230, 323, 326, 329, 332, 335, 338, 368, 371].includes(c)) return 'ti-snowflake';
+  if ([182, 185, 281, 284, 311, 314, 317, 320, 350, 362, 365, 374, 377].includes(c)) return 'ti-cloud-snow';
+  return 'ti-cloud-rain';
+}
+function icoDesc(desc, hora) {   // bloques v16: sin código, solo texto
+  const d = String(desc || '').toLowerCase();
+  const noche = hora < 6 || hora >= 21;
+  if (/tormenta/.test(d)) return 'ti-cloud-storm';
+  if (/nieve|nevad|ventisca|aguanieve|granizo/.test(d)) return 'ti-snowflake';
+  if (/lluvia|llovizna|chaparr/.test(d)) return 'ti-cloud-rain';
+  if (/niebla/.test(d)) return 'ti-mist';
+  if (/parcial/.test(d)) return noche ? 'ti-haze-moon' : 'ti-haze';
+  if (/nublado|cubierto/.test(d)) return 'ti-cloud';
+  if (/despejado/.test(d)) return noche ? 'ti-moon' : 'ti-sun';
+  return 'ti-cloud-question';
+}
+
+/** Estado visible de un día: decisión de una persona o, si no hay, el automático. */
+function estadoDia(d, rel) {
+  if (d.decision) return d.decision.decision === 'confirmado' ? 'perdido' : 'trabajo';
+  if (d.pronostico === 'pronosticado') return rel <= 1 ? 'alerta' : 'pasado';
+  if (d.pronostico === 'supero_umbral') return 'hist';
+  return 'ok';
+}
+const ESTADO_TXT = { ok: 'Sin alertas', alerta: 'Probable día perdido', pasado: 'Probable día perdido', perdido: 'Día perdido', trabajo: 'Se trabajó', hist: 'Superó umbral (v16)' };
+
+/** Peor estado de una obra en sus 3 días (mapa). */
+function peorEstado(obra) {
+  const d = obra.dias || [];
+  if (d.slice(0, 2).some(x => x.pronostico === 'pronosticado' && !x.decision)) return 'rojo';
+  if (d[2] && d[2].pronostico === 'pronosticado' && !d[2].decision) return 'naranja';
+  return 'verde';
+}
+function etiquetaObra(obra) {
+  const dias = obra.dias || [];
+  for (let i = 0; i < dias.length; i++) {
+    const d = dias[i];
+    if (d.pronostico === 'pronosticado' && !d.decision && d.alerta && d.alerta.length) {
+      const c = d.alerta[0];
+      return obra.codigo + ' · ' + CAUSAS[c.causa].emo + ' ' + CAUSAS[c.causa].corto(c) + ' ' + nombreDia(d.fecha).toLowerCase();
+    }
+  }
+  return obra.codigo + ' · ' + obra.nombreCorto;
+}
+
+// ── DIÁLOGOS Y TOAST (de PreKOM) ─────────────────────────────
+let dialogoResolve = null;
+function mostrarConfirm(titulo, desc, opciones) {
+  opciones = opciones || {};
+  return new Promise(resolve => {
+    dialogoResolve = resolve;
+    document.getElementById('dialogo-title').textContent = titulo;
+    document.getElementById('dialogo-desc').textContent = desc;
+    document.getElementById('dialogo-botones').innerHTML =
+      '<button class="btn-dialogo-cancelar" onclick="cerrarDialogo(false)">' + escaparHtml(opciones.textoCancelar || 'Cancelar') + '</button>' +
+      '<button class="' + (opciones.danger ? 'btn-dialogo-danger' : 'btn-dialogo-aceptar') + '" onclick="cerrarDialogo(true)">' + escaparHtml(opciones.textoAceptar || 'Aceptar') + '</button>';
+    document.getElementById('dialogo-overlay').classList.add('visible');
+  });
+}
+function mostrarAviso(mensaje, titulo) {
+  return new Promise(resolve => {
+    dialogoResolve = resolve;
+    document.getElementById('dialogo-title').textContent = titulo || 'Aviso';
+    document.getElementById('dialogo-desc').textContent = mensaje;
+    document.getElementById('dialogo-botones').innerHTML = '<button class="btn-dialogo-aceptar" onclick="cerrarDialogo(true)">Aceptar</button>';
+    document.getElementById('dialogo-overlay').classList.add('visible');
+  });
+}
+function cerrarDialogo(r) {
+  document.getElementById('dialogo-overlay').classList.remove('visible');
+  if (dialogoResolve) { const f = dialogoResolve; dialogoResolve = null; f(!!r); }
+}
+let toastId = null;
+function mostrarToast(m) {
+  const el = document.getElementById('toast');
+  el.textContent = m; el.classList.add('visible');
+  if (toastId) clearTimeout(toastId);
+  toastId = setTimeout(() => { el.classList.remove('visible'); toastId = null; }, 2200);
+}
+function abrirModal(id) { document.getElementById(id).classList.add('visible'); }
+function cerrarModal(id) { document.getElementById(id).classList.remove('visible'); }
+
+window.addEventListener('unhandledrejection', e => {
+  console.error('Promesa rechazada sin capturar:', e.reason);
+  mostrarAviso('Ocurrió un error inesperado: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
+});
+
+// ══════════════════════════════════════════════════════════════
+// DATOS — llamarBackend(action, params) → funciones co_* de Supabase
+// ══════════════════════════════════════════════════════════════
+const ACCIONES_LECTURA = new Set(['validarSesion', 'inicio', 'dias', 'detalle', 'novedades', 'notificaciones']);
+function errRed_() { return new Error('No se pudo conectar con el servidor. Revisá tu conexión y volvé a intentar.'); }
+
+/** (= PreKOM v9) rechazo de la base → {ok:false, error}; falla de red → excepción. */
+function sbResultado_(action, res) {
+  if (!res.error) return res.data;
+  const e = res.error;
+  const msg = String(e.message || e.msg || '');
+  if (!e.code && !e.details && (/fetch|network|Failed|Load failed|NetworkError/i.test(msg) || !msg)) { console.error('[datos]', action, '— red:', e); throw errRed_(); }
+  (e.code === 'P0001' ? console.warn : console.error)('[datos]', action, '— rechazo de la base:', e);
+  if (e.code === 'PGRST301' || e.code === 'PGRST303' || /JWT/i.test(msg)) return { ok: false, motivo: 'sin_sesion', error: 'La sesión venció. Volvé a ingresar.' };
+  return { ok: false, error: msg || 'La base rechazó la operación.' };
+}
+async function rpc_(action, fn, args) { return sbResultado_(action, await sb.rpc(fn, args)); }
+
+async function llamarBackend(action, params, reintentando) {
+  params = params || {};
+  if (!navigator.onLine) throw new Error('Estás sin conexión a internet. Revisá tu conexión y volvé a intentar.');
+  if (!sb) throw errRed_();
+  try {
+    return await llamarBackendSb_(action, params);
+  } catch (err) {
+    console.error('[llamarBackend]', action, params, '—', err.message);
+    if (!reintentando && ACCIONES_LECTURA.has(action)) { await new Promise(r => setTimeout(r, 700)); return llamarBackend(action, params, true); }
+    throw err;
+  }
+}
+
+async function llamarBackendSb_(action, p) {
+  switch (action) {
+    case 'validarSesion': return datosValidarSesion_();
+    case 'inicio': return rpc_(action, 'co_cargar_inicio', {});
+    case 'dias': return rpc_(action, 'co_cargar_dias', { p_obra: p.obraId, p_desde: p.desde, p_hasta: p.hasta });
+    case 'detalle': return rpc_(action, 'co_cargar_detalle', { p_obra: p.obraId, p_fechas: p.fechas });
+    case 'novedades': return rpc_(action, 'co_novedades', { p_limite: 40 });
+    case 'notificaciones': return rpc_(action, 'goe_notif_listar', { p_app: 'co', p_incluir_resueltas: !!p.resueltas });
+    case 'decidir': {
+      const r = await rpc_(action, 'co_decidir', { p_obra: p.obraId, p_fecha: p.fecha, p_decision: p.decision, p_tipo: p.tipo || null,
+        p_desde: p.desde == null ? null : p.desde, p_hasta: p.hasta == null ? null : p.hasta, p_causas: p.causas || [], p_observacion: p.observacion || '' });
+      registrarActividad_('decidir', p.fecha, r && r.ok ? 'OK' : 'ERROR', r && r.ok ? { decision: p.decision, tipo: p.tipo || null, causas: p.causas || [], horas: r.horasPerdidas } : { error: r && r.error }, p.obraId);
+      return r;
+    }
+    case 'quitarDecision': {
+      const r = await rpc_(action, 'co_decision_ocultar', { p_obra: p.obraId, p_fecha: p.fecha });
+      registrarActividad_('quitar_decision', p.fecha, r && r.ok ? 'OK' : 'ERROR', null, p.obraId);
+      return r;
+    }
+    case 'resolverNotif': {
+      const r = await rpc_(action, 'goe_notif_resolver', { p_id: p.id, p_estado: p.estado, p_nota: p.nota || '' });
+      registrarActividad_('notif_' + p.estado, p.id, r && r.ok ? 'OK' : 'ERROR', null, p.obraId);
+      return r;
+    }
+  }
+  throw new Error('Acción desconocida: ' + action);
+}
+
+/** Sesión de Supabase + persona habilitada en ClimaObra. (= PreKOM v9) */
+async function datosValidarSesion_() {
+  const s = await sb.auth.getSession();
+  const session = s && s.data && s.data.session;
+  if (!session) return { ok: false, motivo: 'sin_sesion' };
+  const email = String(session.user.email || '').toLowerCase();
+  const [rEntra, rPersona] = await Promise.all([sb.rpc('goe_puede_entrar', { p_app: 'co' }), sb.rpc('goe_mi_persona')]);
+  const entra = sbResultado_('goe_puede_entrar', rEntra);
+  const personaId = sbResultado_('goe_mi_persona', rPersona);
+  if (entra && entra.ok === false) return entra;
+  if (!personaId) return { ok: false, motivo: 'no_encontrado' };
+  if (entra !== true) return { ok: false, motivo: 'inactivo' };
+  let nombre = email;
+  const rp = await sb.from('goe_personas').select('nombre_apellido').eq('id', personaId).maybeSingle();
+  if (!rp.error && rp.data) nombre = rp.data.nombre_apellido || email;
+  return { ok: true, email: email, nombreApellido: nombre };
+}
+
+/** Actividad en goe_actividad (app co). La base fija quién y cuándo. Nunca frena la UI. */
+function registrarActividad_(evento, objeto, resultado, detalle, obraId) {
+  try {
+    if (!sb || !emailActual || !navigator.onLine) return;
+    sb.from('goe_actividad').insert({
+      app: 'co', obra_id: obraId || obraSel || null, sesion_id: SESION_ID, evento: evento,
+      objeto: objeto == null || objeto === '' ? null : String(objeto).slice(0, 2000),
+      resultado: resultado == null || resultado === '' ? null : String(resultado).slice(0, 500),
+      detalle: detalle || null
+    }).then(r => { if (r.error) console.warn('[actividad]', r.error.message); }, () => { });
+  } catch (err) { /* nunca frena la UI */ }
+}
+
+// ── SESIÓN (localStorage) ────────────────────────────────────
+function leerSesion() { try { const s = JSON.parse(localStorage.getItem(SESION_KEY) || 'null'); return s && typeof s.email === 'string' ? s : null; } catch (e) { return null; } }
+function guardarSesion(email, nombre) { try { localStorage.setItem(SESION_KEY, JSON.stringify({ email: email, nombreApellido: nombre || '' })); } catch (e) { /* sin storage */ } }
+function borrarSesion() { try { localStorage.removeItem(SESION_KEY); } catch (e) { /* sin storage */ } }
+function leerPref(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function guardarPref(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* sin storage */ } }
+
+// ── BOOT Y LOGIN (de PreKOM v9.1.1) ──────────────────────────
+window.addEventListener('DOMContentLoaded', boot);
+
+function iniciarMedicionHeader_() {
+  const header = document.getElementById('app-header');
+  const medir = () => document.documentElement.style.setProperty('--header-h', header.getBoundingClientRect().height + 'px');
+  medir();
+  if (window.ResizeObserver) new ResizeObserver(() => { medir(); if (mapa) mapa.invalidateSize(); }).observe(header);
+}
+
+function boot() {
+  document.addEventListener('keydown', onKeydownGlobal);
+  lapizInit();
+  mostrarPantalla('login');
+  if (!sb) { mostrarPasoLogin('sin-conexion'); return; }
+  const sesion = leerSesion();
+  if (!sesion) { mostrarPasoLogin('email'); return; }
+  mostrarPasoLogin('validando');
+  revalidarSesion(sesion.email);
+}
+
+async function revalidarSesion(email) {
+  let r;
+  try { r = await llamarBackend('validarSesion', { email: email }); }
+  catch (err) { mostrarPasoLogin('sin-conexion'); return; }
+  if (!r.ok) {
+    borrarSesion();
+    if (r.motivo === 'sin_sesion') { document.getElementById('input-email').value = email || ''; mostrarPasoLogin('email'); return; }
+    mostrarTextoErrorAuth(r.motivo); mostrarPasoLogin('error-auth'); return;
+  }
+  guardarSesion(r.email || email, r.nombreApellido);
+  await onLoginOk(r.email || email, r.nombreApellido, 'sesion_guardada');
+}
+
+function mostrarPantalla(cual) {
+  document.getElementById('login-screen').classList.toggle('visible', cual === 'login');
+  document.getElementById('app').style.display = cual === 'app' ? 'flex' : 'none';
+  document.getElementById('cinta').classList.toggle('hidden', cual !== 'app');
+}
+function mostrarPasoLogin(paso) {
+  ['email', 'codigo', 'validando', 'sin-conexion', 'error-auth'].forEach(p => document.getElementById('paso-' + p).classList.toggle('activo', p === paso));
+}
+const MOTIVOS_AUTH = {
+  no_encontrado: 'Ese email no está habilitado para ClimaObra. Pedile al administrador que te habilite en GOE Admin.',
+  inactivo: 'Tu email no tiene acceso a ClimaObra (o lo tiene desactivado). Pedile al administrador que te habilite en GOE Admin.',
+  sin_sesion: 'La sesión venció. Volvé a ingresar.'
+};
+function mostrarTextoErrorAuth(m) { document.getElementById('texto-error-auth').textContent = MOTIVOS_AUTH[m] || 'No pudimos validar tu sesión. Iniciá sesión de nuevo.'; }
+function traducirErrorAuth(err) {
+  const m = (err && (err.message || err.msg)) || String(err);
+  if (/rate limit|too many|security purposes/i.test(m)) return 'Esperá un minuto antes de pedir un código nuevo.';
+  if (/expired|invalid/i.test(m)) return 'Código incorrecto o vencido. Pedí uno nuevo si hace falta.';
+  if (/fetch|network/i.test(m)) return 'No pudimos conectar. Revisá tu conexión e intentá de nuevo.';
+  if (/signups? not allowed|not allowed/i.test(m)) return MOTIVOS_AUTH.no_encontrado;
+  return m;
+}
+function iniciarCooldownReenvio() {
+  const btn = document.getElementById('btn-reenviar-pin');
+  let restante = COOLDOWN_SEG;
+  btn.disabled = true;
+  clearInterval(cooldownInterval);
+  const tick = () => {
+    btn.textContent = 'Reenviar código (' + restante + 's)';
+    if (restante <= 0) { clearInterval(cooldownInterval); cooldownInterval = null; btn.disabled = false; btn.textContent = 'Reenviar código'; return; }
+    restante--;
+  };
+  tick(); cooldownInterval = setInterval(tick, 1000);
+}
+async function pedirCodigo_(esReenvio) {
+  const btn = document.getElementById(esReenvio ? 'btn-reenviar-pin' : 'btn-pedir-pin');
+  const errBox = document.getElementById(esReenvio ? 'login-error-pin' : 'login-error-email');
+  errBox.classList.remove('visible');
+  const inp = document.getElementById('input-email');
+  const email = (esReenvio ? (inp.dataset.pendiente || '') : inp.value.trim()).toLowerCase();
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errBox.textContent = 'Ingresá un email válido.'; errBox.classList.add('visible'); return; }
+  if (!sb) { mostrarPasoLogin('sin-conexion'); return; }
+  btn.disabled = true;
+  try {
+    const { error } = await sb.auth.signInWithOtp({ email: email, options: { shouldCreateUser: true, emailRedirectTo: REDIRECT_MAIL } });
+    if (error) {
+      console.error('[signInWithOtp]', error);
+      errBox.textContent = traducirErrorAuth(error); errBox.classList.add('visible');
+      if (/rate limit|too many|security purposes/i.test(error.message || '')) {
+        inp.dataset.pendiente = email; document.getElementById('email-confirmado').textContent = email;
+        mostrarPasoLogin('codigo'); iniciarCooldownReenvio(); return;
+      }
+      btn.disabled = false; return;
+    }
+    document.getElementById('email-confirmado').textContent = email;
+    inp.dataset.pendiente = email;
+    document.getElementById('input-pin').value = '';
+    document.getElementById('login-error-pin').classList.remove('visible');
+    mostrarPasoLogin('codigo'); iniciarCooldownReenvio();
+    if (esReenvio) mostrarToast('Código reenviado');
+  } catch (err) { mostrarPasoLogin('sin-conexion'); }
+  if (!esReenvio) btn.disabled = false;
+}
+async function validarCodigo_() {
+  const btn = document.getElementById('btn-validar-pin');
+  const email = document.getElementById('input-email').dataset.pendiente;
+  const pin = document.getElementById('input-pin').value.replace(/\D/g, '');
+  const errBox = document.getElementById('login-error-pin');
+  errBox.classList.remove('visible');
+  if (!/^\d{6,10}$/.test(pin)) { errBox.textContent = 'Revisá el código: son los números que llegaron por mail.'; errBox.classList.add('visible'); return; }
+  btn.disabled = true;
+  try {
+    const { error } = await sb.auth.verifyOtp({ email: email, token: pin, type: 'email' });
+    if (error) { console.error('[verifyOtp]', error); errBox.textContent = traducirErrorAuth(error); errBox.classList.add('visible'); btn.disabled = false; return; }
+    const r = await llamarBackend('validarSesion', { email: email });
+    if (!r.ok) {
+      try { await sb.auth.signOut({ scope: 'local' }); } catch (e) { /* sin red */ }
+      mostrarTextoErrorAuth(r.motivo); mostrarPasoLogin('error-auth'); btn.disabled = false; return;
+    }
+    clearInterval(cooldownInterval); cooldownInterval = null;
+    guardarSesion(r.email || email, r.nombreApellido);
+    await onLoginOk(r.email || email, r.nombreApellido, 'codigo');
+  } catch (err) { mostrarPasoLogin('sin-conexion'); }
+  btn.disabled = false;
+}
+document.getElementById('btn-pedir-pin').addEventListener('click', () => pedirCodigo_(false));
+document.getElementById('input-email').addEventListener('keydown', e => { if (e.key === 'Enter') pedirCodigo_(false); });
+document.getElementById('btn-reenviar-pin').addEventListener('click', () => pedirCodigo_(true));
+document.getElementById('btn-validar-pin').addEventListener('click', validarCodigo_);
+document.getElementById('input-pin').addEventListener('keydown', e => { if (e.key === 'Enter') validarCodigo_(); });
+document.getElementById('btn-reintentar-conexion').addEventListener('click', boot);
+document.getElementById('btn-volver-email').addEventListener('click', () => { document.getElementById('input-pin').value = ''; mostrarPasoLogin('email'); });
+document.getElementById('btn-cambiar-email').addEventListener('click', () => { document.getElementById('input-pin').value = ''; mostrarPasoLogin('email'); });
+
+function onKeydownGlobal(e) {
+  if ((e.key === 'ArrowLeft' || e.key === 'ArrowRight') && carruselActivo_() && !algoAbierto_() && !/INPUT|SELECT|TEXTAREA/.test((e.target && e.target.tagName) || '')) {
+    e.preventDefault(); moverObra(e.key === 'ArrowLeft' ? -1 : 1); return;
+  }
+  if (e.ctrlKey && e.altKey && (e.key === 'u' || e.key === 'U')) { e.preventDefault(); abrirSessionDialog(); }
+  if (e.key === 'Escape') { ['modal-decidir', 'modal-detalle'].forEach(cerrarModal); cerrarNotif(); }
+}
+function abrirSessionDialog() {
+  document.getElementById('sd-email').textContent = emailActual || '—';
+  document.getElementById('sd-nombre').textContent = nombreActual || '—';
+  document.getElementById('session-dialog-overlay').classList.add('visible');
+}
+document.getElementById('session-dialog-overlay').addEventListener('click', e => { if (e.target.id === 'session-dialog-overlay') e.target.classList.remove('visible'); });
+document.getElementById('hdr-email').addEventListener('click', abrirSessionDialog);
+async function cerrarSesion() {
+  registrarActividad_('logout', '', 'OK');
+  try { if (sb) await sb.auth.signOut({ scope: 'local' }); } catch (e) { /* sin red */ }
+  borrarSesion();
+  location.reload();
+}
+
+// ══════════════════════════════════════════════════════════════
+// APP
+// ══════════════════════════════════════════════════════════════
+async function onLoginOk(email, nombre, origen) {
+  emailActual = email; nombreActual = nombre || email;
+  document.getElementById('hdr-email').textContent = email;
+  registrarActividad_(origen === 'sesion_guardada' ? 'apertura' : 'login', '', 'OK', { origen: origen });
+  mostrarPantalla('app');
+  iniciarMedicionHeader_();
+  await cargarInicio(true);
+  suscribirRealtime_();
+  programarRecargas_();
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && Date.now() - ultimaCarga > 5 * 60 * 1000) refrescarTodo_('foco');
+  });
+}
+
+/** Carga obras + estado de 3 días. primera: decide la vista de arranque. */
+async function cargarInicio(primera) {
+  let r;
+  try { r = await llamarBackend('inicio'); }
+  catch (err) { document.getElementById('vista-cargando').innerHTML = escaparHtml(err.message) + '<br><button class="btn-chico" style="margin-top:10px" onclick="cargarInicio(true)">Reintentar</button>'; return; }
+  if (!r || !r.ok) { document.getElementById('vista-cargando').textContent = (r && r.error) || 'No se pudieron cargar las obras.'; return; }
+  inicio = r;
+  ultimaCarga = Date.now();
+  document.getElementById('vista-cargando').classList.add('hidden');
+  if (!inicio.obras.length) {
+    document.getElementById('vista-cargando').classList.remove('hidden');
+    document.getElementById('vista-cargando').textContent = 'Todavía no tenés obras asignadas en ClimaObra. Pedile al administrador que te habilite en GOE Admin.';
+    return;
+  }
+  pintarSelectorObra_();
+  pintarFranjaDesact_();
+  pintarFlechas_();
+  pintarCampana_(inicio.notificacionesPendientes);
+  cargarNovedades();
+  const multi = inicio.obras.length > 1;
+  document.getElementById('nav-mapa').classList.toggle('hidden', !multi);
+  if (primera) {
+    const guardada = leerPref(OBRA_KEY);
+    obraSel = obraPorId(guardada) ? guardada : inicio.obras[0].obraId;
+    document.getElementById('sel-obra').value = obraSel;
+    await irA(multi ? 'mapa' : 'obra');   // diseño: con más de una obra, abre en el Mapa
+  } else {
+    if (!obraPorId(obraSel)) obraSel = inicio.obras[0].obraId;
+    if (vista === 'mapa') pintarMapa();
+  }
+}
+
+/** v17.0.2 — desde las 4:00, avisa si alguna obra no tiene la consulta de hoy. */
+function pintarFranjaDesact_() {
+  const el = document.getElementById('franja-desact');
+  const hora = Number(new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', hourCycle: 'h23' }).format(new Date()));
+  const hoy = inicio.hoy;
+  const viejas = inicio.obras.filter(o => !(o.dias && o.dias[0] && o.dias[0].consulta === hoy));
+  let txt = '';
+  if (hora >= 4 && viejas.length) {
+    const ult = inicio.obras.flatMap(o => (o.dias || []).map(d => d.consulta)).filter(Boolean).sort().pop();
+    txt = viejas.length === inicio.obras.length
+      ? 'Pronóstico desactualizado: la última consulta es del ' + (ult ? ddmm(ult) : '—') + '. CO Sync todavía no trajo el de hoy; los valores pueden haber cambiado.'
+      : 'Pronóstico desactualizado en ' + viejas.map(o => o.codigo + ' ' + o.nombreCorto).join(', ') + ': falta la consulta de hoy.';
+  }
+  document.getElementById('franja-desact-txt').textContent = txt;
+  el.classList.toggle('hidden', !txt);
+  document.documentElement.style.setProperty('--franja-h', txt ? el.getBoundingClientRect().height + 'px' : '0px');
+  if (mapa) setTimeout(() => mapa.invalidateSize(), 50);
+}
+
+function pintarSelectorObra_() {
+  const sel = document.getElementById('sel-obra');
+  sel.innerHTML = inicio.obras.map(o => '<option value="' + o.obraId + '">' + escaparHtml(o.codigo + ' ' + o.nombreCorto) + '</option>').join('');
+  sel.value = obraSel || inicio.obras[0].obraId;
+  sel.classList.toggle('hidden', inicio.obras.length < 2);
+}
+document.getElementById('sel-obra').addEventListener('change', e => {
+  obraSel = e.target.value; guardarPref(OBRA_KEY, obraSel);
+  irA(vista === 'mapa' ? 'obra' : vista);
+});
+document.querySelectorAll('.hdr-nav-btn').forEach(b => b.addEventListener('click', () => irA(b.dataset.vista)));
+
+async function irA(v) {
+  vista = v;
+  lapizBorrar();
+  document.querySelectorAll('.hdr-nav-btn').forEach(b => b.classList.toggle('active', b.dataset.vista === v));
+  document.getElementById('vista-mapa').classList.toggle('hidden', v !== 'mapa');
+  document.getElementById('vista-obra').classList.toggle('hidden', v !== 'obra');
+  document.getElementById('vista-calendario').classList.toggle('hidden', v !== 'calendario');
+  pintarFlechas_();
+  if (v === 'mapa') { pintarMapa(); registrarActividad_('ver_mapa', '', 'OK'); }
+  if (v === 'obra') { await cargarVistaObra(); registrarActividad_('ver_obra', obraSel, 'OK'); }
+  if (v === 'calendario') { if (!calMes) calMes = (inicio ? inicio.hoy : hoyAR()).slice(0, 7); await cargarCalendario(); registrarActividad_('ver_calendario', calMes, 'OK'); }
+}
+
+// ── CARRUSEL DE OBRAS (v17.0.3) ──────────────────────────────
+const CARRUSEL_SEG = 30;
+let carruselSeg = 0;
+function carruselActivo_() { return vista === 'obra' && inicio && inicio.obras.length > 1; }
+function algoAbierto_() {
+  return ['modal-decidir', 'modal-detalle', 'dialogo-overlay', 'session-dialog-overlay'].some(id => document.getElementById(id).classList.contains('visible'))
+    || document.getElementById('panel-notif').classList.contains('visible') || lapizState.activo;
+}
+function pintarFlechas_() {
+  const on = carruselActivo_();
+  document.getElementById('car-izq').classList.toggle('hidden', !on);
+  document.getElementById('car-der').classList.toggle('hidden', !on);
+  document.body.classList.toggle('con-carrusel', on);
+}
+async function moverObra(paso) {
+  if (!carruselActivo_()) return;
+  const i = inicio.obras.findIndex(o => o.obraId === obraSel);
+  const n = inicio.obras.length;
+  obraSel = inicio.obras[((i < 0 ? 0 : i) + paso + n) % n].obraId;
+  guardarPref(OBRA_KEY, obraSel);
+  document.getElementById('sel-obra').value = obraSel;
+  carruselSeg = 0;
+  lapizBorrar();
+  await cargarVistaObra(true);
+}
+document.getElementById('car-izq').addEventListener('click', () => moverObra(-1));
+document.getElementById('car-der').addEventListener('click', () => moverObra(1));
+// En pantalla completa pasa sola cada 30 s; en pausa si hay algo abierto
+setInterval(() => {
+  const auto = carruselActivo_() && !!document.fullscreenElement;
+  const barra = document.getElementById('car-barra');
+  if (barra) barra.classList.toggle('hidden', !auto);
+  if (!auto) { carruselSeg = 0; return; }
+  if (algoAbierto_() || document.hidden) return;
+  carruselSeg++;
+  if (barra) barra.firstElementChild.style.width = Math.min(100, carruselSeg / CARRUSEL_SEG * 100) + '%';
+  if (carruselSeg >= CARRUSEL_SEG) moverObra(1);
+}, 1000);
+
+// ── MAPA ─────────────────────────────────────────────────────
+function pintarMapa() {
+  if (!inicio) return;
+  if (!window.L) { document.getElementById('mapa').innerHTML = '<div class="cargando">No se pudo cargar el mapa.</div>'; }
+  else {
+    if (!mapa) {
+      mapa = L.map('mapa', { zoomControl: true, attributionControl: true });
+      // v17.0.1 — OpenStreetMap (CARTO pasó a pedir clave)
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+      }).addTo(mapa);
+      capaMarcadores = L.layerGroup().addTo(mapa);
+      // v17.0.3 — botón "Ver todas las obras" (debajo de + / −)
+      const VerTodo = L.Control.extend({ options: { position: 'topleft' }, onAdd: function () {
+        const d = L.DomUtil.create('div', 'leaflet-bar');
+        d.innerHTML = '<button type="button" class="mk-ver-todo" title="Ver todas las obras" aria-label="Ver todas las obras"><i class="ti ti-arrows-maximize"></i></button>';
+        L.DomEvent.disableClickPropagation(d);
+        d.querySelector('button').addEventListener('click', () => encuadrarMapa_());
+        return d;
+      } });
+      new VerTodo().addTo(mapa);
+    }
+    capaMarcadores.clearLayers();
+    const pts = [];
+    // Etiquetas de obras cercanas (≈ 60 km) hacia lados distintos, para que no se tapen
+    const LADOS = [['right', [12, 0]], ['left', [-12, 0]], ['top', [0, -12]], ['bottom', [0, 12]]];
+    const cerca = [];
+    inicio.obras.forEach(o => {
+      const vecinos = cerca.filter(c => Math.abs(c.lat - o.lat) < 0.6 && Math.abs(c.lon - o.lon) < 0.6).length;
+      cerca.push(o);
+      o._lado = LADOS[vecinos % LADOS.length];
+    });
+    inicio.obras.forEach(o => {
+      const est = peorEstado(o);
+      const icon = L.divIcon({ className: 'mk-wrap', iconSize: [22, 22], iconAnchor: [11, 11],
+        html: '<div class="mk ' + (est === 'verde' ? '' : est) + (est === 'rojo' ? ' blink' : '') + '"></div>' });
+      const m = L.marker([o.lat, o.lon], { icon: icon, title: o.codigo + ' ' + o.nombreCorto, keyboard: true })
+        .bindTooltip(escaparHtml(etiquetaObra(o)), { permanent: true, direction: o._lado[0], offset: o._lado[1], className: 'mk-etq ' + (est === 'verde' ? '' : est) })
+        .on('click', () => { obraSel = o.obraId; guardarPref(OBRA_KEY, obraSel); document.getElementById('sel-obra').value = obraSel; irA('obra'); });
+      m.addTo(capaMarcadores);
+      pts.push([o.lat, o.lon]);
+    });
+    mapaPts = pts;
+    setTimeout(() => { mapa.invalidateSize(); if (!mapaEncuadrado) encuadrarMapa_(); }, 30);
+  }
+  // lista lateral
+  const PESO = { rojo: 0, naranja: 1, verde: 2 };
+  const ordenadas = inicio.obras.slice().sort((a, b) => PESO[peorEstado(a)] - PESO[peorEstado(b)] || a.codigo.localeCompare(b.codigo));
+  document.getElementById('mapa-lista').innerHTML = ordenadas.map(o => {
+    const est = peorEstado(o);
+    return '<button class="obra-fila ' + (est === 'verde' ? '' : est) + '" onclick="abrirObra(\'' + o.obraId + '\')">' +
+      '<div class="obra-fila-nom"><span class="obra-fila-cod">' + escaparHtml(o.codigo) + '</span>' + escaparHtml(o.nombreCorto) + '</div>' +
+      '<div class="obra-fila-dias">' + (o.dias || []).map((d, i) => {
+        const e = estadoDia(d, i);
+        const cls = e === 'alerta' ? 'rojo' : e === 'pasado' ? 'naranja' : e === 'perdido' ? 'perdido' : e === 'trabajo' ? 'trabajo' : '';
+        const c = (d.alerta && d.alerta[0] && (e === 'alerta' || e === 'pasado')) ? CAUSAS[d.alerta[0].causa].emo + ' ' + CAUSAS[d.alerta[0].causa].corto(d.alerta[0]) : (e === 'ok' ? (d.conDatos ? '✓' : 'sin datos') : ESTADO_TXT[e]);
+        return '<div class="mini-dia ' + cls + '"><b>' + nombreDia(d.fecha) + '</b>' + escaparHtml(c) + '</div>';
+      }).join('') + '</div></button>';
+  }).join('');
+}
+let mapaPts = [], mapaEncuadrado = false;
+/** Encuadre inicial con todas las obras (al entrar y con el botón ⤢). */
+function encuadrarMapa_() {
+  if (!mapa || !mapaPts.length) return;
+  if (mapaPts.length === 1) mapa.setView(mapaPts[0], 9); else mapa.fitBounds(mapaPts, { padding: [70, 70], maxZoom: 9 });
+  mapaEncuadrado = true;
+}
+function abrirObra(id) { obraSel = id; guardarPref(OBRA_KEY, id); document.getElementById('sel-obra').value = id; irA('obra'); }
+
+// ── VISTA PRONÓSTICO (dashboard de obra) ─────────────────────
+async function cargarVistaObra(silencioso) {
+  const cont = document.getElementById('vista-obra');
+  if (!silencioso) cont.innerHTML = '<div class="cargando"><div class="spinner"></div>Cargando pronóstico…</div>';
+  const hoy = inicio ? inicio.hoy : hoyAR();
+  let r;
+  try { r = await llamarBackend('detalle', { obraId: obraSel, fechas: [hoy, sumarDias(hoy, 1), sumarDias(hoy, 2)] }); }
+  catch (err) { cont.innerHTML = '<div class="cargando">' + escaparHtml(err.message) + '<br><button class="btn-chico" style="margin-top:10px" onclick="cargarVistaObra()">Reintentar</button></div>'; return; }
+  if (!r || !r.ok) { cont.innerHTML = '<div class="cargando">' + escaparHtml((r && r.error) || 'No se pudo cargar la obra.') + '</div>'; return; }
+  detalleObra = r;
+  pintarVistaObra();
+}
+
+function pintarVistaObra() {
+  const r = detalleObra, o = r.obra, u = o.umbrales;
+  const cont = document.getElementById('vista-obra');
+  const consulta = r.dias.map(d => d.consulta).filter(Boolean).sort().pop();
+  const chips = ['<span class="chip">Jornada <strong>' + o.horaInicio + '–' + o.horaFin + ' h</strong></span>'];
+  if (u.lluvia != null) chips.push('<span class="chip"><i class="ti ti-cloud-rain"></i> Lluvia ≥ <strong>' + num(u.lluvia) + ' mm</strong></span>');
+  if (u.viento != null) chips.push('<span class="chip"><i class="ti ti-wind"></i> Viento ≥ <strong>' + num(u.viento) + ' km/h</strong></span>');
+  if (u.rafaga != null) chips.push('<span class="chip"><i class="ti ti-tornado"></i> Ráfaga ≥ <strong>' + num(u.rafaga) + ' km/h</strong></span>');
+  if (u.tempMax != null) chips.push('<span class="chip"><i class="ti ti-temperature-sun"></i> Calor ≥ <strong>' + num(u.tempMax) + ' °C</strong></span>');
+  if (u.tempMin != null) chips.push('<span class="chip"><i class="ti ti-snowflake"></i> Helada ≤ <strong>' + num(u.tempMin) + ' °C</strong></span>');
+  cont.innerHTML =
+    '<div class="obra-cab"><div class="obra-tit"><small>' + escaparHtml(o.codigo) + '</small>' + escaparHtml(o.nombreCorto) + '</div>' +
+    (inicio.obras.length > 1 ? '<span class="carrusel-pos" id="car-pos">' + (inicio.obras.findIndex(x => x.obraId === o.obraId) + 1) + ' de ' + inicio.obras.length +
+      '<span class="carrusel-barra hidden" id="car-barra" title="Pasa sola a la siguiente obra"><span></span></span></span>' : '') +
+    '<div class="chips">' + chips.join('') + '</div>' +
+    '<div class="obra-fuente">Pronóstico de modelo (wttr.in) · ' + (consulta ? 'consulta del ' + ddmm(consulta) : 'todavía sin consulta') + '</div></div>' +
+    '<div class="dias-grid">' + r.dias.map(d => htmlPanelDia(d, o)).join('') + '</div>';
+}
+
+// ── EVOLUCIÓN DEL PRONÓSTICO (v17.0.4) ───────────────────────
+// El cambio se mide en relación al umbral de la obra (4 mm pesan mucho si el
+// umbral es 10 mm, poco si es 50). Las temperaturas no tienen un "cero" natural
+// (helada ≤ 0 °C), así que se miden contra una escala fija de 10 °C.
+const EVO_ESCALA_TEMP = 10;         // °C
+const EVO_RELEVANTE   = 0.10;       // cambio > 10 % de la escala → flecha
+const EVO_CORTES      = { cambiante: 0.20, inestable: 0.50 };   // rango / escala
+/** Tendencia de una medida: primera vs. última consulta; rango = máx − mín (fracción de la escala). */
+function analizarEvo_(vals, x) {
+  const v = vals.filter(n => n != null).map(Number);
+  if (v.length < 2) return { flecha: '', clase: 'igual', tip: 'Una sola consulta', rango: 0, cuenta: false };
+  const tieneUmb = x.umb != null;
+  // sin umbral en la obra: escala de referencia (10 mm, 40 y 60 km/h) solo para la flecha gris
+  const escala = x.temp ? EVO_ESCALA_TEMP : (tieneUmb && Number(x.umb) > 0 ? Number(x.umb) : x.ref);
+  const delta = v[v.length - 1] - v[0];
+  const rango = escala ? (Math.max(...v) - Math.min(...v)) / escala : 0;
+  const relevante = Math.abs(delta) / escala > EVO_RELEVANTE;
+  const signo = (delta > 0 ? '+' : '') + num(delta);
+  if (!relevante) return { flecha: '=', clase: 'igual', tip: 'Sin cambio relevante (' + signo + ')', rango: rango, cuenta: tieneUmb };
+  const sube = delta > 0;
+  if (!tieneUmb) return { flecha: sube ? '↑' : '↓', clase: 'neutro', tip: (sube ? 'Subió ' : 'Bajó ') + signo + ' · la obra no tiene umbral para esta medida', rango: rango, cuenta: false };
+  const peor = x.menor ? !sube : sube;
+  return { flecha: sube ? '↑' : '↓', clase: peor ? 'peor' : 'mejor', tip: (peor ? 'Se acerca al umbral' : 'Se aleja del umbral') + ' (' + signo + ')', rango: rango, cuenta: true };
+}
+/** Calidad: el mayor rango entre las medidas con umbral. */
+function calidadEvo_(peso, hayUmbral) {
+  if (!hayUmbral) return null;
+  const pct = Math.round(peso * 100) + ' %';
+  if (peso >= EVO_CORTES.inestable) return { clase: 'inestable', txt: 'Inestable', tip: 'Cambió mucho entre consultas (hasta ' + pct + ' del umbral). Conviene no confiar todavía.' };
+  if (peso >= EVO_CORTES.cambiante) return { clase: 'cambiante', txt: 'Cambiante', tip: 'Se movió bastante entre consultas (hasta ' + pct + ' del umbral).' };
+  return { clase: 'estable', txt: 'Estable', tip: 'Casi no cambió entre consultas (hasta ' + pct + ' del umbral).' };
+}
+
+/** Panel de un día: estado, causas, evolución, 8 bloques y pie (decisión). */
+function htmlPanelDia(d, o) {
+  const hoy = inicio ? inicio.hoy : hoyAR();
+  const rel = difDias(d.fecha, hoy);
+  const est = estadoDia(d, rel);
+  const blink = est === 'alerta';
+  const u = o.umbrales;
+  const causas = (d.alerta || []);
+  const horasCruce = {};
+  causas.forEach(c => { (horasCruce[c.hora] = horasCruce[c.hora] || []).push(c.causa); });
+  const nivel = o.nivel || (obraPorId(o.obraId) || {}).nivel || 0;
+
+  let h = '<article class="dia-panel ' + est + (blink ? ' blink' : '') + '"><div class="dia-banda"></div>';
+  h += '<div class="dia-head"><div><div class="dia-nom">' + escaparHtml(rel >= 0 && rel <= 2 ? nombreDia(d.fecha) : diaSem(d.fecha)) + '</div>' +
+       '<div class="dia-fecha">' + diaSem(d.fecha) + ' ' + ddmm(d.fecha) + '</div></div>' +
+       '<span class="estado ' + est + '">' + (blink ? '<i class="punto blink"></i>' : '') + ESTADO_TXT[est] + '</span></div>';
+
+  // causas
+  h += '<div class="dia-causas">';
+  if (causas.length && (est === 'alerta' || est === 'pasado' || est === 'hist' || d.decision)) {
+    causas.forEach(c => {
+      const k = CAUSAS[c.causa];
+      const hora = c.causa === 'lluvia' ? '' : ' <span class="causa-hora">a las ' + c.hora + ' h · ' + (c.enJornada ? 'en jornada' : 'fuera de jornada') + '</span>';
+      h += '<div class="causa"><i class="ti ' + k.ico + '"></i>' + escaparHtml(k.txt(c)) + hora + '</div>';
+    });
+  } else if (!d.bloques || !d.bloques.length) {
+    h += '<div class="sin-causas">Sin pronóstico para este día.</div>';
+  } else {
+    h += '<div class="sin-causas">Ningún umbral cruzado.</div>';
+  }
+  h += '</div>';
+
+  // evolución (solo si hay más de una consulta wttr)
+  // v17.0.4 — columnas con la fecha de cada consulta, tendencia ↑ ↓ = por fila
+  //           y calidad del pronóstico (estable / cambiante / inestable)
+  const evo = (d.evolucion || []).filter(e => e.fuente === 'wttr');
+  if (evo.length > 1) {
+    const filas = [
+      { lbl: 'Lluvia (mm)', f: e => e.lluvia, umb: u.lluvia, ref: 10 },
+      { lbl: 'Viento máx.', f: e => e.vientoMax, umb: u.viento, ref: 40 },
+      evo.some(e => e.rafagaMax != null) ? { lbl: 'Ráfaga máx.', f: e => e.rafagaMax, umb: u.rafaga, ref: 60 } : null,
+      { lbl: 'Temp. máx.', f: e => e.tempMax, umb: u.tempMax, temp: true },
+      { lbl: 'Temp. mín.', f: e => e.tempMin, umb: u.tempMin, temp: true, menor: true }
+    ].filter(Boolean);
+    const ana = filas.map(x => ({ x: x, t: analizarEvo_(evo.map(x.f), x) }));
+    const peso = ana.filter(a => a.t.cuenta).reduce((m, a) => Math.max(m, a.t.rango), 0);
+    const cal = calidadEvo_(peso, ana.some(a => a.t.cuenta));
+    const etqCol = e => e.consulta === hoy ? 'Hoy' : ddmm(e.consulta);
+    const fila = a => '<tr><td>' + a.x.lbl + '</td>' + evo.map((e, i) => {
+      const v = a.x.f(e); const cruza = a.x.umb != null && v != null && (a.x.menor ? v <= a.x.umb : v >= a.x.umb);
+      return '<td class="' + (i === evo.length - 1 ? 'ult ' : '') + (cruza ? 'cruza' : '') + '">' + num(v) + '</td>';
+    }).join('') + '<td class="tend" title="' + escaparHtml(a.t.tip) + '"><span class="tend-fl ' + a.t.clase + '">' + a.t.flecha + '</span></td></tr>';
+    h += '<div class="evo"><div class="evo-tit"><span>Cómo viene cambiando el pronóstico de este día</span>' +
+      (cal ? '<span class="calidad ' + cal.clase + '" title="' + escaparHtml(cal.tip) + '"><i class="punto"></i>' + cal.txt + '</span>' : '') + '</div>' +
+      '<table><tr><th>Consulta del</th>' +
+      evo.map(e => '<th class="' + (e.consulta === hoy ? 'hoy-col' : '') + '" title="Pronóstico consultado el ' + ddmm(e.consulta) + ', ' + e.anticipacion + ' día' + (e.anticipacion === 1 ? '' : 's') + ' antes">' + etqCol(e) + '</th>').join('') +
+      '<th class="tend" title="Tendencia entre la primera y la última consulta">Tend.</th></tr>' +
+      ana.map(fila).join('') + '</table>' +
+      '<div class="evo-ley"><b style="color:var(--st-alerta)">↑</b> se acerca al umbral · <b style="color:var(--st-ok)">↓</b> se aleja · <b style="color:#94a3b8">=</b> sin cambio relevante · gris: medida sin umbral en la obra</div></div>';
+  }
+
+  // bloques
+  if (d.bloques && d.bloques.length) {
+    const maxViento = Math.max(60, (u.viento || 0) * 1.5, (u.rafaga || 0) * 1.2, ...d.bloques.map(b => Math.max(b.viento || 0, b.rafaga || 0)));
+    const maxLluvia = Math.max(5, (u.lluvia || 0) / 2, ...d.bloques.map(b => b.lluvia || 0));
+    const pct = (v, mx) => Math.max(0, Math.min(100, (Number(v) || 0) / mx * 100));
+    h += '<div class="bloques"><div class="bloques-cab"><span>Hora</span><span></span><span class="c-temp">Temp</span><span class="c-viento">Viento</span><span class="c-lluvia">Lluvia</span></div>';
+    d.bloques.forEach(b => {
+      const enJ = b.hora >= o.horaInicio && b.hora < o.horaFin;
+      const cr = horasCruce[b.hora] || [];
+      const crT = (u.tempMax != null && b.temp >= u.tempMax) || (u.tempMin != null && b.temp <= u.tempMin);
+      const crV = (u.viento != null && b.viento >= u.viento) || (u.rafaga != null && b.rafaga >= u.rafaga);
+      const crL = cr.includes('lluvia');
+      const cruza = crT || crV || cr.length > 0;
+      const ico = b.codigo ? icoClima(b.codigo, b.hora) : icoDesc(b.descripcion, b.hora);
+      h += '<div class="bloque' + (enJ ? '' : ' fuera') + (cruza ? ' cruza' : '') + '" title="' + escaparHtml(b.descripcion + (b.fuente === 'v16' ? ' · dato del momento (v16)' : '') + (enJ ? '' : ' · fuera de jornada')) + '">' +
+        '<span class="bloque-hora">' + String(b.hora).padStart(2, '0') + ':00</span>' +
+        '<span class="bloque-ico"><i class="ti ' + ico + (cruza && blink ? ' blink' : '') + '"></i></span>' +
+        '<div class="medida temp' + (crT ? ' cruza' : '') + '"><span class="medida-val">' + num(b.temp) + ' °C</span><div class="barra"><span style="width:' + pct((b.temp || 0) + 5, 45) + '%"></span></div></div>' +
+        '<div class="medida viento' + (crV ? ' cruza' : '') + '"><span class="medida-val">' + num(b.viento) + (b.rafaga != null ? ' <small>ráf. ' + num(b.rafaga) + '</small>' : ' km/h') + '</span><div class="barra"><span style="width:' + pct(Math.max(b.viento || 0, b.rafaga || 0), maxViento) + '%"></span></div></div>' +
+        '<div class="medida lluvia' + (crL ? ' cruza' : '') + '"><span class="medida-val">' + num(b.lluvia) + ' mm' + (b.probLluvia != null ? ' <small>' + b.probLluvia + '%</small>' : '') + '</span><div class="barra"><span style="width:' + pct(b.lluvia, maxLluvia) + '%"></span></div></div>' +
+        '</div>';
+    });
+    h += '</div>';
+  } else {
+    h += '<div class="sin-datos">CO Sync todavía no trajo pronóstico para este día.</div>';
+  }
+
+  // pie: notificaciones (pistas) + decisión
+  h += '<div class="dia-pie">';
+  (d.notificaciones || []).filter(n => n.appDestino === 'co' && n.estado === 'pendiente').forEach(n => {
+    h += '<div class="pista"><i class="ti ti-bell"></i> ' + escaparHtml(n.titulo) + (n.creadaPor ? ' · ' + escaparHtml(n.creadaPor) : '') + '</div>';
+  });
+  if (d.decision) {
+    const x = d.decision;
+    h += '<div class="decision"><strong>' + (x.decision === 'confirmado'
+      ? 'Perdido ' + (x.tipo === 'total' ? 'total' : 'parcial ' + x.desde + '–' + x.hasta + ' h') + ' · ' + num(x.horasPerdidas) + ' h · ' + escaparHtml((x.causas || []).join(', '))
+      : 'Se trabajó') + '</strong><span>' + escaparHtml(x.usuario) + ' · ' + hhmm(x.creadoEn) + (x.observacion ? ' · ' + escaparHtml(x.observacion) : '') + '</span></div>';
+  }
+  if (rel > 0) {
+    if (!d.decision) h += '<div class="dia-pie-nota">Se confirma el mismo día o después.</div>';
+  } else if (nivel >= 2) {
+    h += '<button class="btn-chico' + (d.decision ? ' sec' : '') + '" onclick="abrirDecidir(\'' + o.obraId + '\', \'' + d.fecha + '\')">' + (d.decision ? 'Cambiar' : 'Confirmar día') + '</button>';
+  } else if (!d.decision) {
+    h += '<div class="dia-pie-nota">Sin confirmar.</div>';
+  }
+  h += '</div></article>';
+  return h;
+}
+
+// ── CALENDARIO ───────────────────────────────────────────────
+async function cargarCalendario(silencioso) {
+  const cont = document.getElementById('vista-calendario');
+  if (!silencioso) cont.innerHTML = '<div class="cargando"><div class="spinner"></div>Cargando calendario…</div>';
+  const desde = calMes + '-01';
+  const [y, m] = calMes.split('-').map(Number);
+  const hasta = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+  let r;
+  try { r = await llamarBackend('dias', { obraId: obraSel, desde: desde, hasta: hasta }); }
+  catch (err) { cont.innerHTML = '<div class="cargando">' + escaparHtml(err.message) + '</div>'; return; }
+  if (!r || !r.ok) { cont.innerHTML = '<div class="cargando">' + escaparHtml((r && r.error) || 'No se pudo cargar el calendario.') + '</div>'; return; }
+  calDias = r.dias;
+  pintarCalendario();
+}
+function pintarCalendario() {
+  const o = obraPorId(obraSel);
+  const [y, m] = calMes.split('-').map(Number);
+  const hoy = inicio ? inicio.hoy : hoyAR();
+  const primero = new Date(Date.UTC(y, m - 1, 1)).getUTCDay();   // 0 = domingo
+  const offset = (primero + 6) % 7;                                // semana empieza el lunes
+  let resumen = { perdido: 0, horas: 0 };
+  calDias.forEach(d => { if (d.decision && d.decision.decision === 'confirmado') { resumen.perdido++; resumen.horas += Number(d.decision.horasPerdidas || 0); } });
+  let h = '<div class="cal-cab"><button class="btn-chico sec" onclick="moverMes(-1)" aria-label="Mes anterior"><i class="ti ti-chevron-left"></i></button>' +
+    '<div class="cal-mes">' + MESES[m - 1] + ' ' + y + '</div>' +
+    '<button class="btn-chico sec" onclick="moverMes(1)" aria-label="Mes siguiente"><i class="ti ti-chevron-right"></i></button>' +
+    '<button class="btn-chico sec" onclick="moverMes(0)">Hoy</button>' +
+    '<span class="chip"><strong>' + escaparHtml(o.codigo + ' ' + o.nombreCorto) + '</strong></span>' +
+    '<span class="chip">Confirmados en el mes: <strong>' + resumen.perdido + ' día' + (resumen.perdido === 1 ? '' : 's') + ' · ' + num(resumen.horas) + ' h</strong></span></div>';
+  h += '<div class="cal-grid">' + ['lun', 'mar', 'mié', 'jue', 'vie', 'sáb', 'dom'].map(x => '<div class="cal-dsem">' + x + '</div>').join('');
+  for (let i = 0; i < offset; i++) h += '<div class="cal-dia vacio"></div>';
+  calDias.forEach(d => {
+    const rel = difDias(d.fecha, hoy);
+    const est = estadoDia(d, rel);
+    // v17.0.1 — con pronóstico y sin umbrales cruzados: "Sin alertas" (vacío = sin datos)
+    const tag = est === 'ok' ? (d.conDatos ? '<span class="cal-tag ok">Sin alertas</span>' : '') : '<span class="cal-tag ' + est + (est === 'alerta' ? ' blink' : '') + '">' +
+      (est === 'perdido' ? (d.decision.tipo === 'total' ? 'Perdido' : 'Parcial ' + num(d.decision.horasPerdidas) + ' h') : est === 'trabajo' ? 'Se trabajó' : est === 'hist' ? 'Superó umbral' : 'Probable') + '</span>';
+    const icos = (d.alerta || []).map(c => '<i class="ti ' + CAUSAS[c.causa].ico + '" title="' + escaparHtml(CAUSAS[c.causa].txt(c)) + '"></i>').join('');
+    h += '<button class="cal-dia' + (rel === 0 ? ' hoy' : '') + (d.conDatos ? '' : ' sin-datos-dia') + '" onclick="abrirDetalleDia(\'' + d.fecha + '\')" aria-label="' + d.fecha + ' ' + ESTADO_TXT[est] + '">' +
+      '<span class="cal-num">' + Number(d.fecha.slice(8, 10)) + '</span>' + tag + '<span class="cal-ico">' + icos + '</span>' +
+      (d.notifPendientes ? '<i class="ti ti-bell cal-notif" title="Notificación pendiente"></i>' : '') + '</button>';
+  });
+  h += '</div><div class="cal-ley">' +
+    '<span><i class="punto" style="background:var(--st-ok)"></i> Sin alertas</span>' +
+    '<span><i class="punto" style="background:var(--st-alerta)"></i> Probable día perdido</span>' +
+    '<span><i class="punto" style="background:var(--st-perdido)"></i> Confirmado</span>' +
+    '<span><i class="punto" style="background:var(--st-trabajo)"></i> Se trabajó</span>' +
+    '<span><i class="punto" style="background:var(--st-hist)"></i> Superó umbral (dato v16)</span>' +
+    '<span><i class="ti ti-bell" style="color:#2563eb"></i> Notificación pendiente</span>' +
+    '<span>Vacío: sin datos</span></div>';
+  document.getElementById('vista-calendario').innerHTML = h;
+}
+function moverMes(n) {
+  if (n === 0) calMes = (inicio ? inicio.hoy : hoyAR()).slice(0, 7);
+  else { const [y, m] = calMes.split('-').map(Number); const d = new Date(Date.UTC(y, m - 1 + n, 1)); calMes = d.toISOString().slice(0, 7); }
+  cargarCalendario();
+}
+async function abrirDetalleDia(fecha, obraId) {
+  const id = obraId || obraSel;
+  const o = obraPorId(id);
+  document.getElementById('detalle-tit').textContent = (o ? o.codigo + ' ' + o.nombreCorto + ' · ' : '') + diaSem(fecha) + ' ' + ddmm(fecha) + '/' + fecha.slice(0, 4);
+  document.getElementById('detalle-body').innerHTML = '<div class="cargando"><div class="spinner"></div></div>';
+  abrirModal('modal-detalle');
+  let r;
+  try { r = await llamarBackend('detalle', { obraId: id, fechas: [fecha] }); }
+  catch (err) { document.getElementById('detalle-body').innerHTML = '<div class="cargando">' + escaparHtml(err.message) + '</div>'; return; }
+  if (!r || !r.ok) { document.getElementById('detalle-body').innerHTML = '<div class="cargando">' + escaparHtml((r && r.error) || 'Error') + '</div>'; return; }
+  document.getElementById('detalle-body').innerHTML = htmlPanelDia(r.dias[0], r.obra);
+  document.getElementById('detalle-body').dataset.fecha = fecha;
+  document.getElementById('detalle-body').dataset.obra = id;
+}
+
+// ── CONFIRMAR / DESCARTAR ────────────────────────────────────
+async function abrirDecidir(obraId, fecha) {
+  const o = obraPorId(obraId);
+  let dia = null;
+  if (detalleObra && detalleObra.obra.obraId === obraId) dia = detalleObra.dias.find(d => d.fecha === fecha);
+  if (!dia) {
+    try { const r = await llamarBackend('detalle', { obraId: obraId, fechas: [fecha] }); if (r && r.ok) dia = r.dias[0]; } catch (e) { /* sigue sin datos */ }
+  }
+  dia = dia || { fecha: fecha, alerta: [], decision: null };
+  decidirCtx = { obraId: obraId, fecha: fecha, obra: o, dia: dia, op: null, causas: new Set() };
+  document.getElementById('decidir-tit').textContent = 'Confirmar día · ' + diaSem(fecha) + ' ' + ddmm(fecha) + ' · ' + o.codigo;
+  const act = document.getElementById('decidir-actual');
+  if (dia.decision) {
+    const x = dia.decision;
+    act.innerHTML = '<strong>Decisión actual:</strong> ' + (x.decision === 'confirmado' ? 'perdido ' + (x.tipo === 'total' ? 'total' : 'parcial ' + x.desde + '–' + x.hasta + ' h') + ' (' + escaparHtml((x.causas || []).join(', ')) + ')' : 'se trabajó') +
+      ' · ' + escaparHtml(x.usuario) + '. Si guardás, la reemplaza (queda en la historia).';
+    act.classList.remove('hidden');
+  } else act.classList.add('hidden');
+  document.getElementById('btn-quitar-decision').classList.toggle('hidden', !dia.decision);
+  // opciones sugeridas desde el pronóstico
+  (dia.alerta || []).forEach(c => decidirCtx.causas.add(CAUSAS[c.causa].conf));
+  const desde = document.getElementById('sel-desde'), hasta = document.getElementById('sel-hasta');
+  desde.innerHTML = Array.from({ length: 24 }, (_, i) => '<option value="' + i + '">' + i + '</option>').join('');
+  hasta.innerHTML = Array.from({ length: 24 }, (_, i) => '<option value="' + (i + 1) + '">' + (i + 1) + '</option>').join('');
+  const primeraHora = (dia.alerta || []).filter(c => c.causa !== 'lluvia' && c.enJornada).map(c => c.hora)[0];
+  desde.value = String(primeraHora != null ? primeraHora : o.horaInicio);
+  hasta.value = String(o.horaFin);
+  document.getElementById('txt-obs').value = '';
+  setOpcion(dia.decision ? (dia.decision.decision === 'descartado' ? 'descartado' : dia.decision.tipo) : null);
+  if (dia.decision && dia.decision.decision === 'confirmado') {
+    decidirCtx.causas = new Set(dia.decision.causas || []);
+    if (dia.decision.tipo === 'parcial') { desde.value = String(dia.decision.desde); hasta.value = String(dia.decision.hasta); }
+    document.getElementById('txt-obs').value = dia.decision.observacion || '';
+  }
+  pintarCausasSel();
+  recalcular();
+  abrirModal('modal-decidir');
+}
+function setOpcion(op) {
+  decidirCtx.op = op;
+  document.querySelectorAll('#modal-decidir .opcion').forEach(b => b.classList.toggle('sel', b.dataset.op === op));
+  document.getElementById('campo-rango').classList.toggle('hidden', op !== 'parcial');
+  document.getElementById('campo-causas').classList.toggle('hidden', !(op === 'total' || op === 'parcial'));
+  recalcular();
+}
+function pintarCausasSel() {
+  document.querySelectorAll('#modal-decidir .chip-sel').forEach(b => b.classList.toggle('sel', decidirCtx.causas.has(b.dataset.causa)));
+}
+function recalcular() {
+  const c = document.getElementById('decidir-calculo');
+  if (!decidirCtx || !(decidirCtx.op === 'total' || decidirCtx.op === 'parcial')) { c.classList.add('hidden'); return; }
+  const o = decidirCtx.obra;
+  const jor = o.horaFin - o.horaInicio;
+  let horas = jor;
+  if (decidirCtx.op === 'parcial') {
+    const d = Number(document.getElementById('sel-desde').value), h = Number(document.getElementById('sel-hasta').value);
+    horas = Math.max(0, Math.min(h, o.horaFin) - Math.max(d, o.horaInicio));
+    if (h <= d) { c.textContent = '"Hasta" tiene que ser mayor que "desde".'; c.classList.remove('hidden'); return; }
+  }
+  c.innerHTML = 'Horas perdidas: <strong>' + num(horas) + '</strong> de ' + jor + ' (jornada ' + o.horaInicio + '–' + o.horaFin + ' h)';
+  c.classList.remove('hidden');
+}
+document.querySelectorAll('#modal-decidir .opcion').forEach(b => b.addEventListener('click', () => setOpcion(b.dataset.op)));
+document.querySelectorAll('#modal-decidir .chip-sel').forEach(b => b.addEventListener('click', () => {
+  const k = b.dataset.causa;
+  if (decidirCtx.causas.has(k)) decidirCtx.causas.delete(k); else decidirCtx.causas.add(k);
+  pintarCausasSel();
+}));
+document.getElementById('sel-desde').addEventListener('change', recalcular);
+document.getElementById('sel-hasta').addEventListener('change', recalcular);
+
+document.getElementById('btn-guardar-decision').addEventListener('click', async () => {
+  const x = decidirCtx;
+  if (!x || !x.op) { mostrarAviso('Elegí qué pasó ese día: perdido total, perdido parcial o se trabajó.'); return; }
+  const params = { obraId: x.obraId, fecha: x.fecha, observacion: document.getElementById('txt-obs').value.trim() };
+  if (x.op === 'descartado') params.decision = 'descartado';
+  else {
+    params.decision = 'confirmado'; params.tipo = x.op; params.causas = Array.from(x.causas);
+    if (!params.causas.length) { mostrarAviso('Elegí al menos una causa: lluvia, viento o temperatura.'); return; }
+    if (x.op === 'parcial') { params.desde = Number(document.getElementById('sel-desde').value); params.hasta = Number(document.getElementById('sel-hasta').value); }
+  }
+  const btn = document.getElementById('btn-guardar-decision');
+  btn.disabled = true;
+  try {
+    const r = await llamarBackend('decidir', params);
+    if (!r || !r.ok) { mostrarAviso((r && r.error) || 'No se pudo guardar.'); return; }
+    cerrarModal('modal-decidir');
+    mostrarToast(params.decision === 'confirmado' ? 'Día perdido confirmado' + (r.notificacion ? ' · avisado a LibroObra' : '') : 'Guardado: se trabajó');
+    await refrescarTodo_('decision');
+  } catch (err) { mostrarAviso(err.message); }
+  finally { btn.disabled = false; }
+});
+document.getElementById('btn-quitar-decision').addEventListener('click', async () => {
+  const x = decidirCtx;
+  const ok = await mostrarConfirm('Quitar decisión', 'El día vuelve a quedar sin confirmar. La decisión queda en la historia y el administrador la puede restaurar.', { textoAceptar: 'Quitar', danger: true });
+  if (!ok) return;
+  try {
+    const r = await llamarBackend('quitarDecision', { obraId: x.obraId, fecha: x.fecha });
+    if (!r || !r.ok) { mostrarAviso((r && r.error) || 'No se pudo quitar.'); return; }
+    cerrarModal('modal-decidir');
+    mostrarToast('Decisión quitada');
+    await refrescarTodo_('decision');
+  } catch (err) { mostrarAviso(err.message); }
+});
+
+// ── 🔔 NOTIFICACIONES ────────────────────────────────────────
+function pintarCampana_(n) {
+  const b = document.getElementById('badge-campana');
+  b.textContent = n > 99 ? '99+' : String(n || 0);
+  b.classList.toggle('hidden', !n);
+}
+document.getElementById('btn-campana').addEventListener('click', abrirNotif);
+document.getElementById('btn-cerrar-notif').addEventListener('click', cerrarNotif);
+document.getElementById('cortina-notif').addEventListener('click', cerrarNotif);
+async function abrirNotif() {
+  document.getElementById('cortina-notif').classList.add('visible');
+  document.getElementById('panel-notif').classList.add('visible');
+  await cargarNotif();
+}
+function cerrarNotif() {
+  document.getElementById('cortina-notif').classList.remove('visible');
+  document.getElementById('panel-notif').classList.remove('visible');
+}
+async function cargarNotif() {
+  const cont = document.getElementById('notif-lista');
+  cont.innerHTML = '<div class="cargando"><div class="spinner"></div></div>';
+  let r;
+  try { r = await llamarBackend('notificaciones', { resueltas: true }); }
+  catch (err) { cont.innerHTML = '<div class="vacio-txt">' + escaparHtml(err.message) + '</div>'; return; }
+  if (!r || !r.ok) { cont.innerHTML = '<div class="vacio-txt">' + escaparHtml((r && r.error) || 'No se pudieron cargar.') + '</div>'; return; }
+  const lst = r.notificaciones || [];
+  pintarCampana_(lst.filter(n => n.estado === 'pendiente').length);
+  if (!lst.length) { cont.innerHTML = '<div class="vacio-txt">No hay notificaciones de otras apps para tus obras.</div>'; return; }
+  cont.innerHTML = lst.map(n => {
+    const o = obraPorId(n.obraId);
+    const puede = o && o.nivel >= 2 && n.estado === 'pendiente';
+    return '<div class="notif ' + n.estado + '">' +
+      '<div class="notif-tit">' + escaparHtml(n.titulo) + '</div>' +
+      '<div class="notif-meta">' + escaparHtml(n.codigo + ' ' + n.nombreCorto) + ' · desde ' + escaparHtml(String(n.appOrigen).toUpperCase()) +
+        (n.fechaRef ? ' · día ' + ddmm(n.fechaRef) : '') + ' · ' + hhmm(n.creadaEn) + (n.creadaPor ? ' · ' + escaparHtml(n.creadaPor) : '') + '</div>' +
+      (n.detalle ? '<div class="notif-det">' + escaparHtml(n.detalle) + '</div>' : '') +
+      (n.estado !== 'pendiente' ? '<div class="notif-meta">' + (n.estado === 'resuelta' ? 'Resuelta' : 'Descartada') + (n.resueltaPor ? ' por ' + escaparHtml(n.resueltaPor) : '') + (n.nota ? ' · ' + escaparHtml(n.nota) : '') + '</div>' : '') +
+      '<div class="notif-acc">' +
+        (n.fechaRef ? '<button class="btn-chico sec" onclick="verDiaNotif(\'' + n.obraId + '\', \'' + n.fechaRef + '\')">Ver día</button>' : '') +
+        (puede ? '<button class="btn-chico" onclick="resolverNotif(\'' + n.id + '\', \'resuelta\', \'' + n.obraId + '\')">Resuelta</button>' +
+                 '<button class="btn-chico sec" onclick="resolverNotif(\'' + n.id + '\', \'descartada\', \'' + n.obraId + '\')">Descartar</button>' : '') +
+      '</div></div>';
+  }).join('');
+}
+function verDiaNotif(obraId, fecha) {
+  cerrarNotif();
+  if (obraId !== obraSel) { obraSel = obraId; guardarPref(OBRA_KEY, obraId); document.getElementById('sel-obra').value = obraId; }
+  abrirDetalleDia(fecha, obraId);
+}
+async function resolverNotif(id, estado, obraId) {
+  try {
+    const r = await llamarBackend('resolverNotif', { id: id, estado: estado, obraId: obraId });
+    if (!r || !r.ok) { mostrarAviso((r && r.error) || 'No se pudo guardar.'); return; }
+    mostrarToast(estado === 'resuelta' ? 'Notificación resuelta' : 'Notificación descartada');
+    await cargarNotif();
+    refrescarTodo_('notif');
+  } catch (err) { mostrarAviso(err.message); }
+}
+
+// ── CINTA DE NOVEDADES ───────────────────────────────────────
+async function cargarNovedades() {
+  let r;
+  try { r = await llamarBackend('novedades'); } catch (err) { return; }
+  if (!r || !r.ok) return;
+  const items = (r.items || []).map(textoNovedad_).filter(Boolean);
+  const pista = document.getElementById('cinta-pista');
+  pista.innerHTML = (items.length ? items : ['<span class="cinta-item">Sin novedades en tus obras en los últimos 7 días.</span>']).join('');
+  const largo = pista.textContent.length;
+  pista.style.animationDuration = Math.max(25, largo * 0.22) + 's';
+}
+function textoNovedad_(i) {
+  const obra = '<b>' + escaparHtml(i.codigo) + '</b> ' + escaparHtml(i.nombreCorto);
+  if (i.tipo === 'alerta') {
+    const c = (i.alerta || [])[0];
+    if (!c) return '';
+    return '<span class="cinta-item alerta">⚠️ ' + obra + ' · ' + nombreDia(i.fecha) + ' ' + ddmm(i.fecha) + ': <b>' + escaparHtml(CAUSAS[c.causa].txt(c)) + '</b>' +
+      (c.causa !== 'lluvia' ? ' a las ' + c.hora + ' h' : '') + ((i.alerta || []).length > 1 ? ' y ' + (i.alerta.length - 1) + ' más' : '') + '</span>';
+  }
+  if (i.tipo === 'decision') {
+    return '<span class="cinta-item">' + (i.decision === 'confirmado' ? '⛔ ' : '✅ ') + obra + ' · ' + ddmm(i.fecha) + ' ' +
+      (i.decision === 'confirmado' ? 'confirmado perdido ' + (i.tipoDia === 'total' ? 'total' : 'parcial ' + i.desde + '–' + i.hasta + ' h') + ' (' + escaparHtml((i.causas || []).join(', ')) + ')' : 'se trabajó') +
+      ' · ' + escaparHtml(String(i.usuario || '').split('@')[0]) + '</span>';
+  }
+  if (i.tipo === 'notificacion') {
+    return '<span class="cinta-item">🔔 ' + escaparHtml(String(i.appOrigen).toUpperCase()) + ' → ' + escaparHtml(String(i.appDestino).toUpperCase()) + ' · ' + obra + ' · ' + escaparHtml(i.titulo) +
+      (i.estado !== 'pendiente' ? ' (' + i.estado + ')' : '') + '</span>';
+  }
+  return '';
+}
+
+// ── ACTUALIZACIÓN: Realtime + 0:00 + 3:15 + foco ─────────────
+let refrescoPend = null;
+function refrescarTodo_(motivo) {
+  clearTimeout(refrescoPend);
+  return new Promise(resolve => {
+    refrescoPend = setTimeout(async () => {
+      await cargarInicio(false);
+      if (vista === 'obra') await cargarVistaObra(true);
+      if (vista === 'calendario') await cargarCalendario(true);
+      const det = document.getElementById('detalle-body');
+      if (document.getElementById('modal-detalle').classList.contains('visible') && det.dataset.fecha) abrirDetalleDia(det.dataset.fecha, det.dataset.obra);
+      if (document.getElementById('panel-notif').classList.contains('visible')) cargarNotif();
+      if (motivo === 'realtime') mostrarToast('Actualizado');
+      resolve();
+    }, motivo === 'realtime' ? 600 : 0);
+  });
+}
+function suscribirRealtime_() {
+  if (!sb || canalRT) return;
+  try {
+    canalRT = sb.channel('co-cambios')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'co_decisiones' }, () => refrescarTodo_('realtime'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'co_dias' }, () => refrescarTodo_('realtime'))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'goe_notificaciones' }, () => refrescarTodo_('realtime'))
+      .subscribe(estado => { if (estado === 'CHANNEL_ERROR' || estado === 'TIMED_OUT') console.warn('[realtime]', estado); });
+  } catch (err) { console.warn('[realtime] no disponible:', err.message); }
+}
+/** Sin refresco periódico: solo a las 0:00 (cambia "hoy"), 3:15 (pronóstico nuevo) y 4:05 (revisa si quedó desactualizado). */
+function programarRecargas_() {
+  const ahora = new Date();
+  const partes = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).formatToParts(ahora).map(p => [p.type, p.value]));
+  const seg = Number(partes.hour) * 3600 + Number(partes.minute) * 60 + Number(partes.second);
+  const objetivos = [30, 3 * 3600 + 15 * 60, 4 * 3600 + 5 * 60];   // 0:00:30, 3:15 y 4:05 (franja de desactualizado)
+  const faltan = objetivos.map(t => (t - seg + 86400) % 86400 || 86400);
+  setTimeout(async () => { await refrescarTodo_('reloj'); programarRecargas_(); }, Math.min(...faltan) * 1000);
+}
+
+// ── PANTALLA COMPLETA ────────────────────────────────────────
+document.getElementById('btn-pantalla').addEventListener('click', async () => {
+  try {
+    if (!document.fullscreenElement) { await document.documentElement.requestFullscreen(); registrarActividad_('pantalla_completa', vista, 'OK'); }
+    else await document.exitFullscreen();
+  } catch (err) { mostrarToast('El navegador no permitió la pantalla completa'); }
+});
+document.addEventListener('fullscreenchange', () => {
+  document.body.classList.toggle('pantalla-completa', !!document.fullscreenElement);
+  document.querySelector('#btn-pantalla i').className = 'ti ' + (document.fullscreenElement ? 'ti-minimize' : 'ti-maximize');
+  setTimeout(() => { if (mapa) mapa.invalidateSize(); }, 200);
+});
+
+// ============================================================
+// LÁPIZ GLOBAL v2.1 — de PreKOM v9.1.1 (sin cambios de lógica)
+// ============================================================
+let lapizState = { activo:false, color:'#ef4444', grosor:4, modo:'libre', dibujando:false, dragActivo:false, dragOffX:0, dragOffY:0, startX:0, startY:0, capturando:false };
+let _lapizCtx = null;
+let _lapizSnapshot = null;
+function lapizInit(){
+  const canvas = document.getElementById('lpz-canvas');
+  if(!canvas) return;
+  _lapizCtx = canvas.getContext('2d');
+  lapizBorrar();
+  window.addEventListener('resize', lapizResize);
+  document.addEventListener('keydown', e => { if(e.key === 'Escape' && lapizState.activo) lapizToggle(); });
+  canvas.addEventListener('pointerdown', lapizPointerDown);
+  canvas.addEventListener('pointermove', lapizPointerMove);
+  canvas.addEventListener('pointerup', lapizPointerUp);
+  canvas.addEventListener('pointerleave', lapizPointerUp);
+  canvas.addEventListener('wheel', e => { if(lapizState.activo) window.scrollBy(0, e.deltaY); }, {passive:true});
+  const handle = document.querySelector('.lpz-bar-handle');
+  if(handle) handle.addEventListener('pointerdown', lapizBarraDragStart);
+  document.addEventListener('visibilitychange', () => { if(document.hidden && lapizState.activo && !lapizState.capturando) lapizToggle(); });
+}
+function lapizSyncCanvasSize(){
+  const canvas = document.getElementById('lpz-canvas');
+  if(!canvas) return;
+  canvas.width = 0; canvas.height = 0;
+  canvas.width = Math.max(document.documentElement.scrollWidth, document.body.scrollWidth, window.innerWidth);
+  canvas.height = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight, window.innerHeight);
+}
+function lapizResize(){ lapizBorrar(); }
+function lapizToggle(){
+  lapizState.activo = !lapizState.activo;
+  const canvas = document.getElementById('lpz-canvas');
+  const bar = document.getElementById('lpz-bar');
+  const btn = document.getElementById('btn-lapiz-toggle');
+  canvas.classList.toggle('activo', lapizState.activo);
+  bar.classList.toggle('show', lapizState.activo);
+  btn.classList.toggle('activo', lapizState.activo);
+  if(lapizState.activo){ bar.style.left = '50%'; bar.style.top = ''; bar.style.bottom = '48px'; bar.style.transform = 'translateX(-50%)'; lapizSyncCanvasSize(); }
+  else { lapizBorrar(); }
+}
+function lapizBorrar(){
+  lapizSyncCanvasSize();
+  if(!_lapizCtx) return;
+  const canvas = document.getElementById('lpz-canvas');
+  _lapizCtx.clearRect(0, 0, canvas.width, canvas.height);
+}
+function lapizSetColor(hex, el){ lapizState.color = hex; document.querySelectorAll('.lpz-color-dot').forEach(d => d.classList.remove('activo')); el.classList.add('activo'); }
+function lapizSetGrosor(px, el){ lapizState.grosor = px; document.querySelectorAll('.lpz-grosor-dot').forEach(d => d.classList.remove('activo')); el.classList.add('activo'); }
+function lapizSetModo(modo, el){ lapizState.modo = modo; document.querySelectorAll('.lpz-modo-btn').forEach(d => d.classList.remove('activo')); el.classList.add('activo'); }
+function lapizPointerDown(e){
+  if(!lapizState.activo) return;
+  lapizState.dibujando = true;
+  if(lapizState.modo === 'libre'){ _lapizCtx.beginPath(); _lapizCtx.moveTo(e.pageX, e.pageY); }
+  else { lapizState.startX = e.pageX; lapizState.startY = e.pageY; const canvas = document.getElementById('lpz-canvas'); _lapizSnapshot = _lapizCtx.getImageData(0, 0, canvas.width, canvas.height); }
+}
+function lapizPointerMove(e){
+  if(!lapizState.activo || !lapizState.dibujando) return;
+  _lapizCtx.strokeStyle = lapizState.color; _lapizCtx.lineWidth = lapizState.grosor; _lapizCtx.lineCap = 'round'; _lapizCtx.lineJoin = 'round';
+  if(lapizState.modo === 'libre'){ _lapizCtx.lineTo(e.pageX, e.pageY); _lapizCtx.stroke(); }
+  else { lapizDibujarFigura(e.pageX, e.pageY); }
+}
+function lapizPointerUp(e){
+  if(lapizState.dibujando && lapizState.modo !== 'libre' && e){ lapizDibujarFigura(e.pageX, e.pageY); }
+  lapizState.dibujando = false; _lapizSnapshot = null;
+}
+function lapizDibujarFigura(x, y){
+  if(!_lapizSnapshot) return;
+  _lapizCtx.putImageData(_lapizSnapshot, 0, 0);
+  _lapizCtx.beginPath();
+  const sx = lapizState.startX, sy = lapizState.startY;
+  if(lapizState.modo === 'linea'){ _lapizCtx.moveTo(sx, sy); _lapizCtx.lineTo(x, y); }
+  else if(lapizState.modo === 'rectangulo'){ _lapizCtx.rect(sx, sy, x - sx, y - sy); }
+  else if(lapizState.modo === 'circulo'){ const cx = (sx + x) / 2, cy = (sy + y) / 2; const rx = Math.abs(x - sx) / 2 || 0.01, ry = Math.abs(y - sy) / 2 || 0.01; _lapizCtx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2); }
+  _lapizCtx.stroke();
+}
+function lapizBarraDragStart(e){
+  e.preventDefault();
+  const bar = document.getElementById('lpz-bar');
+  const rect = bar.getBoundingClientRect();
+  lapizState.dragActivo = true; lapizState.dragOffX = e.clientX - rect.left; lapizState.dragOffY = e.clientY - rect.top;
+  bar.style.transform = 'none'; bar.style.bottom = 'auto'; bar.style.left = rect.left + 'px'; bar.style.top = rect.top + 'px';
+  document.addEventListener('pointermove', lapizBarraDragMove);
+  document.addEventListener('pointerup', lapizBarraDragEnd);
+}
+function lapizBarraDragMove(e){
+  if(!lapizState.dragActivo) return;
+  const bar = document.getElementById('lpz-bar');
+  const rect = bar.getBoundingClientRect();
+  let x = e.clientX - lapizState.dragOffX, y = e.clientY - lapizState.dragOffY;
+  x = Math.max(0, Math.min(x, window.innerWidth - rect.width)); y = Math.max(0, Math.min(y, window.innerHeight - rect.height));
+  bar.style.left = x + 'px'; bar.style.top = y + 'px';
+}
+function lapizBarraDragEnd(){ lapizState.dragActivo = false; document.removeEventListener('pointermove', lapizBarraDragMove); document.removeEventListener('pointerup', lapizBarraDragEnd); }
+function lapizTimestampArchivo(){ const d = new Date(); const p = n => String(n).padStart(2, '0'); return d.getFullYear() + p(d.getMonth()+1) + p(d.getDate()) + '_' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()); }
+function lapizSanitizarNombreArchivo(str){ return String(str || 'climaobra').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').toLowerCase() || 'climaobra'; }
+function lapizOcultarUIParaCaptura(oculto){ const bar = document.getElementById('lpz-bar'); if(bar) bar.style.visibility = oculto ? 'hidden' : ''; }
+async function capturarPantalla(){
+  let stream = null;
+  lapizState.capturando = true;
+  lapizOcultarUIParaCaptura(true);
+  try{
+    await new Promise(requestAnimationFrame);
+    stream = await navigator.mediaDevices.getDisplayMedia({ video: true, preferCurrentTab: true });
+    const video = document.createElement('video');
+    video.srcObject = stream; video.muted = true;
+    await video.play();
+    if(!video.videoWidth){ await new Promise(resolve => { video.onloadedmetadata = resolve; }); }
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    stream.getTracks().forEach(t => t.stop());
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const o = obraPorId(obraSel);
+    const contexto = vista === 'mapa' ? 'mapa' : (o ? o.codigo + '_' + o.nombreCorto : 'climaobra');
+    a.download = lapizSanitizarNombreArchivo('climaobra_' + contexto) + '_pantalla_' + lapizTimestampArchivo() + '.png';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    mostrarToast('Captura guardada');
+    await new Promise(resolve => setTimeout(resolve, 600));
+  } catch(err){
+    if(stream) stream.getTracks().forEach(t => t.stop());
+    if(err.name === 'NotAllowedError') mostrarToast('Captura cancelada');
+    else { mostrarToast('Error al capturar: ' + err.message); console.error(err); }
+  } finally {
+    lapizState.capturando = false;
+    lapizOcultarUIParaCaptura(false);
+  }
+}
+</script>
+</body>
+</html>
